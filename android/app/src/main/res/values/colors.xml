@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches ColorScheme.surface / scaffoldBackgroundColor in app_theme.dart.
+         Used for the launch window so there is no flash between the Android
+         window and the first Flutter frame. -->
+    <color name="household_surface">#FFF7F5F0</color>
+</resources>
