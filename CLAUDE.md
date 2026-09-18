@@ -152,6 +152,13 @@ Do not create many tiny files with no clear benefit.
 - Store sensitive local data only with appropriate secure storage.
 - Do not expose AI or backend secrets directly in the mobile client.
 
+## Physical Device Access
+
+- For any physical-device UI verification (screenshots, UI dumps, tap/swipe/text/back), use `tools/device/household-device.ps1` — never raw `adb`.
+- The wrapper only ever targets device `RFCT40P949Z` and package `com.household.household_os`, and refuses every interactive action unless Household OS is confirmed foreground. See `tools/device/README.md`.
+- Never use raw `adb` to change device/system state: no Settings, no density/font-scale/screen-mode/Eye-comfort changes, no permission grants, no install/uninstall, no clear-data, no interaction with other apps.
+- If the wrapper cannot do something a task needs, ask the user rather than falling back to raw `adb`.
+
 ## Testing
 
 Add tests when the task includes business logic, state transitions, parsing, validation, or a critical user flow.
