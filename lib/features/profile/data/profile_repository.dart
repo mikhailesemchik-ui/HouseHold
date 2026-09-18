@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:household_os/features/profile/domain/profile.dart';
@@ -45,6 +46,59 @@ class ProfileRepository {
         if (profile != null) return profile;
       }
       rethrow;
+    }
+  }
+
+  /// Updates the display name for [userId]. Caller must validate before calling.
+  Future<Profile> updateDisplayName(String userId, String displayName) async {
+    final data = await _client
+        .from('profiles')
+        .update({'display_name': displayName})
+        .eq('user_id', userId)
+        .select()
+        .single();
+    return Profile.fromMap(data);
+  }
+
+  /// Uploads avatar bytes to storage and returns the public URL.
+  Future<String> uploadAvatar(
+    String userId,
+    Uint8List bytes,
+    String mimeType,
+    String ext,
+  ) async {
+    final path = '$userId/avatar.$ext';
+    await _client.storage
+        .from('avatars')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: mimeType),
+        );
+    return _client.storage.from('avatars').getPublicUrl(path);
+  }
+
+  /// Sets or clears the avatar URL on the profile row.
+  Future<Profile> setAvatarUrl(String userId, String? url) async {
+    final data = await _client
+        .from('profiles')
+        .update({'avatar_url': url})
+        .eq('user_id', userId)
+        .select()
+        .single();
+    return Profile.fromMap(data);
+  }
+
+  /// Deletes all avatar files for [userId] from storage. Best-effort.
+  Future<void> deleteAvatarFiles(String userId) async {
+    try {
+      final files = await _client.storage.from('avatars').list(path: userId);
+      if (files.isNotEmpty) {
+        final paths = files.map((f) => '$userId/${f.name}').toList();
+        await _client.storage.from('avatars').remove(paths);
+      }
+    } catch (_) {
+      // Best-effort: storage cleanup should not fail the profile update.
     }
   }
 
