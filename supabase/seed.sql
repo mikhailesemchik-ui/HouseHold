@@ -1,0 +1,3 @@
+-- Local development seed data.
+-- Add rows here that should be present after `supabase db reset`.
+-- Leave empty for a clean slate (no test data required).
