@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:household_os/app/theme/app_theme.dart';
+import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/features/tasks/domain/recurrence_type.dart';
 import 'package:household_os/features/tasks/domain/task.dart';
 import 'package:household_os/features/tasks/domain/task_member.dart';
@@ -199,7 +200,7 @@ void main() {
         await tester.enterText(find.byType(TextField).first, 'Buy milk');
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byType(BackButton));
+        await tester.tap(find.byType(AppBackButton));
         await tester.pumpAndSettle();
 
         expect(find.text('Discard task?'), findsOneWidget);
@@ -222,7 +223,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Buy milk');
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(BackButton));
+      await tester.tap(find.byType(AppBackButton));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Discard'));
       await tester.pumpAndSettle();

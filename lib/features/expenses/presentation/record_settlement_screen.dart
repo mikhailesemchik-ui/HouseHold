@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/theme/app_theme.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
+import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
@@ -164,9 +165,12 @@ class _SettlementFormScreenState extends ConsumerState<SettlementFormScreen> {
     final useCloseButton = ModalRoute.of(context)?.fullscreenDialog ?? false;
     final header = AppScreenHeader(
       leading: Center(
-        child: useCloseButton ? const CloseButton() : const BackButton(),
+        child: useCloseButton ? const AppCloseButton() : const AppBackButton(),
       ),
       title: 'Record settlement',
+      // The title is long next to the trailing "Record" action's own
+      // width — shrink-to-fit rather than ellipsize ("Record sett…").
+      compactTitle: true,
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: AppSpacing.xs),

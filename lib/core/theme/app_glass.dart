@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 /// consumers only, not a refactor of the already-approved nav.
 abstract final class AppGlass {
   static const double blurSigma = 28.0;
-  static const Color fill = Color(0xC2FBFAF6);
+  // ~72% alpha — one step more transparent than the original ~76%
+  // (0xC2FBFAF6), so backdrop/blur contribution reads more clearly.
+  static const Color fill = Color(0xB8FBFAF6);
   static const double highlightPeak = 0.12;
   static const Color rimColor = Color(0x18000000);
   static const double rimWidth = 0.5;

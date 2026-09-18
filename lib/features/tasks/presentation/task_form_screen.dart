@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/theme/app_theme.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
+import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/app_section_header.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
@@ -254,7 +255,7 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
     final useCloseButton = ModalRoute.of(context)?.fullscreenDialog ?? false;
     final header = AppScreenHeader(
       leading: Center(
-        child: useCloseButton ? const CloseButton() : const BackButton(),
+        child: useCloseButton ? const AppCloseButton() : const AppBackButton(),
       ),
       title: _isEdit ? 'Edit task' : 'New task',
       actions: [

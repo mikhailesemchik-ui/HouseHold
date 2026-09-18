@@ -19,6 +19,7 @@ class AppScreenHeader extends StatelessWidget {
     required this.title,
     this.actions = const [],
     this.bottom,
+    this.compactTitle = false,
   });
 
   /// Typically `const Center(child: AppBackButton())`, or null for a
@@ -37,6 +38,13 @@ class AppScreenHeader extends StatelessWidget {
   /// Optional content directly under the title row, at the same width —
   /// e.g. Today's date subtitle.
   final Widget? bottom;
+
+  /// When `true`, the title shrinks to fit its available width instead of
+  /// ellipsizing — for a header whose title is long relative to its
+  /// leading/trailing chrome (e.g. Record Settlement's "Record settlement"
+  /// next to a trailing "Record" action). Every other screen leaves this
+  /// `false` and is unaffected.
+  final bool compactTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -57,11 +65,22 @@ class AppScreenHeader extends StatelessWidget {
               ),
               SizedBox(width: leading == null ? 0 : AppBarMetrics.titleSpacing),
               Expanded(
-                child: Text(
-                  title,
-                  style: appBarTheme.titleTextStyle,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: compactTitle
+                    ? FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          title,
+                          style: appBarTheme.titleTextStyle,
+                          maxLines: 1,
+                          softWrap: false,
+                        ),
+                      )
+                    : Text(
+                        title,
+                        style: appBarTheme.titleTextStyle,
+                        overflow: TextOverflow.ellipsis,
+                      ),
               ),
               if (actions.isNotEmpty)
                 Padding(

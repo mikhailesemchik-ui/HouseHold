@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/theme/app_theme.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
+import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_money_text.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
@@ -176,7 +177,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     final useCloseButton = ModalRoute.of(context)?.fullscreenDialog ?? false;
     final header = AppScreenHeader(
       leading: Center(
-        child: useCloseButton ? const CloseButton() : const BackButton(),
+        child: useCloseButton ? const AppCloseButton() : const AppBackButton(),
       ),
       title: 'New expense',
       actions: [

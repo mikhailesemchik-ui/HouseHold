@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:household_os/app/theme/app_shell_metrics.dart';
 import 'package:household_os/app/theme/app_theme.dart';
+import 'package:household_os/core/theme/app_glass.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_background.dart';
 import 'package:household_os/features/homes/presentation/household_detail_screen.dart';
@@ -337,21 +338,11 @@ const _kNavDestinations = [
   ),
 ];
 
-// Telegram-derived frosted-glass prototype — NAV ONLY (Shopping composer
-// stays on the frozen `tokens.glassFill`/`tokens.glassHighlight` values).
-// Material reference only, not copied code/shaders — see task notes.
-// Lower fill opacity + stronger blur + a quiet dark edge, replacing the
-// bright/white rim so separation over a white card comes from the edge
-// itself, not from the fill staying near-opaque.
-const double _kNavGlassBlurSigma = 28.0;
-const Color _kNavGlassFill = Color(0xC2FBFAF6);
-const double _kNavGlassHighlightPeak = 0.12;
-const Color _kNavGlassRimColor = Color(0x18000000);
-const double _kNavGlassRimWidth = 0.5;
-const List<BoxShadow> _kNavGlassShadows = [
-  BoxShadow(color: Color(0x20000000), offset: Offset(0, 1), blurRadius: 6),
-];
-
+// Telegram-derived frosted-glass material — shared with every other
+// surfaced button via `AppGlass` (Shopping composer stays on its own
+// frozen `tokens.glassFill`/`tokens.glassHighlight` values, a deliberately
+// distinct text-input surface). Material reference only, not copied
+// code/shaders — see task notes.
 class _GlassNavBar extends StatelessWidget {
   const _GlassNavBar({
     required this.selectedIndex,
@@ -366,7 +357,7 @@ class _GlassNavBar extends StatelessWidget {
     // `side` only affects painting, not the clip path, so this one shape is
     // safe to reuse for both the shadow/rim decoration and the clip below.
     const shape = StadiumBorder(
-      side: BorderSide(color: _kNavGlassRimColor, width: _kNavGlassRimWidth),
+      side: BorderSide(color: AppGlass.rimColor, width: AppGlass.rimWidth),
     );
 
     // The only other BackdropFilter in the app besides the Shopping
@@ -375,21 +366,21 @@ class _GlassNavBar extends StatelessWidget {
     return DecoratedBox(
       decoration: const ShapeDecoration(
         shape: shape,
-        shadows: _kNavGlassShadows,
+        shadows: AppGlass.shadows,
       ),
       child: ClipPath(
         clipper: const ShapeBorderClipper(shape: shape),
         child: BackdropFilter(
           filter: ImageFilter.blur(
-            sigmaX: _kNavGlassBlurSigma,
-            sigmaY: _kNavGlassBlurSigma,
+            sigmaX: AppGlass.blurSigma,
+            sigmaY: AppGlass.blurSigma,
           ),
           child: Stack(
             children: [
               // Base translucent warm-white fill.
               const Positioned.fill(
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: _kNavGlassFill),
+                  decoration: BoxDecoration(color: AppGlass.fill),
                 ),
               ),
               // Subtle inner highlight — light catching the top/left of the
@@ -404,7 +395,7 @@ class _GlassNavBar extends StatelessWidget {
                       end: Alignment.bottomRight,
                       stops: const [0.0, 0.45],
                       colors: [
-                        Colors.white.withValues(alpha: _kNavGlassHighlightPeak),
+                        Colors.white.withValues(alpha: AppGlass.highlightPeak),
                         Colors.white.withValues(alpha: 0.0),
                       ],
                     ),

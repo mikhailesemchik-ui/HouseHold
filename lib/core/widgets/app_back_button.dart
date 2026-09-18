@@ -20,3 +20,21 @@ class AppBackButton extends StatelessWidget {
     );
   }
 }
+
+/// The circular frosted equivalent of [AppBackButton] for screens that pick
+/// a close (not back) affordance — e.g. a form pushed as a
+/// `fullscreenDialog`. Same `Navigator.maybePop` behaviour as Flutter's own
+/// `CloseButton`, so it still triggers a screen's `PopScope`/dirty-state
+/// guard exactly as before; only the paint changes.
+class AppCloseButton extends StatelessWidget {
+  const AppCloseButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCircleIconButton(
+      icon: Icons.close_rounded,
+      tooltip: 'Close',
+      onPressed: () => Navigator.maybePop(context),
+    );
+  }
+}

@@ -203,9 +203,13 @@ class _PeriodSelector extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(4),
+      // Same white surface every other card uses (`surfaceBright`), not the
+      // tonal beige `surfaceContainerLow` — the track should read as part
+      // of the same white/green system, not a separate muted control.
       decoration: ShapeDecoration(
-        color: colorScheme.surfaceContainerLow,
+        color: colorScheme.surfaceBright,
         shape: const StadiumBorder(),
+        shadows: AppShadows.card,
       ),
       child: Row(
         children: [
@@ -447,46 +451,53 @@ class _TaskDistributionList extends StatelessWidget {
     final theme = Theme.of(context);
     return AppSoftCard(
       padding: const EdgeInsets.all(AppSpacing.base),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Recurring tasks',
-            style: theme.textTheme.eyebrow?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+      // Unlike Member Distribution (whose `LinearProgressIndicator` forces
+      // full width), every child here is plain `Text` — none of which is
+      // "greedy", so the Column would otherwise shrink to its widest
+      // line's intrinsic width instead of matching the other cards.
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Recurring tasks',
+              style: theme.textTheme.eyebrow?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          if (distributions.isEmpty)
-            const Text('No recurring task distribution yet.')
-          else
-            ...distributions.map(
-              (distribution) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                child: MergeSemantics(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        distribution.taskTitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        distribution.memberCounts
-                            .map((m) => '${m.displayName} ${m.count}')
-                            .join(' - '),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+            const SizedBox(height: AppSpacing.sm),
+            if (distributions.isEmpty)
+              const Text('No recurring task distribution yet.')
+            else
+              ...distributions.map(
+                (distribution) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  child: MergeSemantics(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          distribution.taskTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Text(
+                          distribution.memberCounts
+                              .map((m) => '${m.displayName} ${m.count}')
+                              .join(' - '),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
