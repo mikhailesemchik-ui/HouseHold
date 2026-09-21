@@ -6,7 +6,7 @@ import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/app_section_header.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
+import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/features/homes/domain/household_event.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
 
@@ -75,14 +75,11 @@ class ActivityScreen extends ConsumerWidget {
 
     return Scaffold(
       body: SafeArea(
+        top: false,
         bottom: false,
         child: activityAsync.when(
-          loading: () => ListView(
-            children: const [
-              header,
-              AppSkeletonList(sectionCounts: {'': 6}, scrollable: false),
-            ],
-          ),
+          loading: () =>
+              ListView(children: const [header, _ActivityLoadingBody()]),
           error: (_, _) => ListView(
             children: [
               header,
@@ -125,6 +122,21 @@ class ActivityScreen extends ConsumerWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+class _ActivityLoadingBody extends StatelessWidget {
+  const _ActivityLoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.xl,
+      ),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 }

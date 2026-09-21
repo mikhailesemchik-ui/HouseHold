@@ -15,6 +15,7 @@ final tasksStreamProvider = StreamProvider.autoDispose
 
 /// Streams task occurrences for a household via Supabase Realtime.
 /// Sorted: overdue incomplete → upcoming incomplete → completed.
+/// autoDispose cancels the stream subscription when the screen is left.
 final occurrencesStreamProvider = StreamProvider.autoDispose
     .family<List<TaskOccurrence>, String>(
       (ref, householdId) =>

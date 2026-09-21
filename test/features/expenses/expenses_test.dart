@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:household_os/app/theme/app_theme.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/features/expenses/data/expense_repository.dart';
 import 'package:household_os/features/expenses/domain/balance.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
@@ -602,13 +601,15 @@ void main() {
   // ---------------------------------------------------------------------------
 
   group('ExpensesScreen widget', () {
-    testWidgets('shows skeleton loading state while stream is pending', (
+    testWidgets('shows real screen shell with local loading while pending', (
       tester,
     ) async {
       final controller = StreamController<List<Expense>>();
       await tester.pumpWidget(buildScreen(controller.stream));
       await tester.pump();
-      expect(find.byType(AppSkeletonList), findsOneWidget);
+      expect(find.text('Expenses'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Add expense'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
       controller.close();
     });
 

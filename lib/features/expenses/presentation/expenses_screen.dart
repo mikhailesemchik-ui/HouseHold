@@ -8,7 +8,6 @@ import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_pressable_scale.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/features/expenses/domain/balance.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/settlement.dart';
@@ -105,16 +104,22 @@ class _ExpensesBody extends ConsumerWidget {
     switch (resolveExpensesLoadState(expensesAsync, settlementsAsync)) {
       case ExpensesLoadState.loading:
         return SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
-            children: const [
+            children: [
               header,
-              AppSkeletonList(sectionCounts: {'': 5}, scrollable: false),
+              _ExpenseActions(
+                onAddExpense: onAddExpense,
+                onRecordSettlement: onRecordSettlement,
+              ),
+              const _ExpensesLoadingBody(),
             ],
           ),
         );
       case ExpensesLoadState.expensesError:
         return SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
             children: [
@@ -128,6 +133,7 @@ class _ExpensesBody extends ConsumerWidget {
         );
       case ExpensesLoadState.settlementsError:
         return SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
             children: [
@@ -149,6 +155,7 @@ class _ExpensesBody extends ConsumerWidget {
     final items = _mergedHistory(expenses, settlements);
 
     return SafeArea(
+      top: false,
       bottom: false,
       child: ListView(
         padding: EdgeInsets.only(
@@ -158,30 +165,9 @@ class _ExpensesBody extends ConsumerWidget {
         children: [
           header,
           BalanceBlock(debts: debts, currentUserId: currentUserId),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.base,
-              AppSpacing.sm,
-              AppSpacing.base,
-              AppSpacing.base,
-            ),
-            child: Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                AppPressableScale(
-                  child: FilledButton.icon(
-                    onPressed: onAddExpense,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Add expense'),
-                  ),
-                ),
-                OutlinedButton(
-                  onPressed: onRecordSettlement,
-                  child: const Text('Record settlement'),
-                ),
-              ],
-            ),
+          _ExpenseActions(
+            onAddExpense: onAddExpense,
+            onRecordSettlement: onRecordSettlement,
           ),
           if (items.isEmpty)
             const AppEmptyState(title: 'No expenses yet')
@@ -215,6 +201,60 @@ class _ExpensesBody extends ConsumerWidget {
   }
 }
 
+class _ExpensesLoadingBody extends StatelessWidget {
+  const _ExpensesLoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.xl,
+      ),
+      child: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _ExpenseActions extends StatelessWidget {
+  const _ExpenseActions({
+    required this.onAddExpense,
+    required this.onRecordSettlement,
+  });
+
+  final VoidCallback onAddExpense;
+  final VoidCallback onRecordSettlement;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.base,
+        AppSpacing.sm,
+        AppSpacing.base,
+        AppSpacing.base,
+      ),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        children: [
+          AppPressableScale(
+            child: FilledButton.icon(
+              onPressed: onAddExpense,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add expense'),
+            ),
+          ),
+          OutlinedButton(
+            onPressed: onRecordSettlement,
+            child: const Text('Record settlement'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Which body the Expenses screen should render given the current state of
 /// both required financial streams. A pure decision, deliberately separate
 /// from the widget that acts on it, so the correctness rule it encodes —
@@ -226,11 +266,18 @@ ExpensesLoadState resolveExpensesLoadState(
   AsyncValue<List<Expense>> expensesAsync,
   AsyncValue<List<Settlement>> settlementsAsync,
 ) {
-  if (expensesAsync.isLoading || settlementsAsync.isLoading) {
+  if (!expensesAsync.hasValue && expensesAsync.isLoading) {
     return ExpensesLoadState.loading;
   }
-  if (expensesAsync.hasError) return ExpensesLoadState.expensesError;
-  if (settlementsAsync.hasError) return ExpensesLoadState.settlementsError;
+  if (!settlementsAsync.hasValue && settlementsAsync.isLoading) {
+    return ExpensesLoadState.loading;
+  }
+  if (!expensesAsync.hasValue && expensesAsync.hasError) {
+    return ExpensesLoadState.expensesError;
+  }
+  if (!settlementsAsync.hasValue && settlementsAsync.hasError) {
+    return ExpensesLoadState.settlementsError;
+  }
   return ExpensesLoadState.ready;
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:inspire_blur/inspire_blur.dart';
 import 'package:household_os/core/services/notification_service.dart';
 import 'package:household_os/core/services/remote_push_notification_service.dart';
 import 'app/app.dart';
@@ -11,6 +12,9 @@ import 'core/services/supabase_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Preloads the top-status-bar-haze blur shader so it renders smoothly the
+  // first time it's shown instead of on the initial frame.
+  await Inspire.warmUp();
   // Edge-to-edge on Android 15+ and consistent system bar contrast on iOS.
   // Set once at startup; AppBarTheme carries the same style so it survives
   // scroll-under and route transitions.

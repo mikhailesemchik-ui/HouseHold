@@ -58,6 +58,7 @@ class HomesScreen extends ConsumerWidget {
             ),
             child: homesAsync.when(
               loading: () => SafeArea(
+                top: false,
                 bottom: false,
                 child: ListView(
                   children: [
@@ -70,6 +71,7 @@ class HomesScreen extends ConsumerWidget {
                 ),
               ),
               error: (_, _) => SafeArea(
+                top: false,
                 bottom: false,
                 child: ListView(
                   children: [
@@ -217,6 +219,7 @@ class _HomesList extends StatelessWidget {
     // consume; explicit `top`/`bottom` padding below is unrelated visual
     // spacing / nav+FAB clearance, unchanged from before.
     return SafeArea(
+      top: false,
       bottom: false,
       child: ListView.separated(
         padding: EdgeInsets.only(

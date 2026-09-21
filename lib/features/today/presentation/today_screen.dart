@@ -95,6 +95,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
       // used to consume; the list's own null `padding` still auto-consumes
       // the shell's bottom nav clearance exactly as before.
       body: SafeArea(
+        top: false,
         bottom: false,
         child: ListView(
           children: [

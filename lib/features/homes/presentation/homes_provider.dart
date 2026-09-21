@@ -69,43 +69,52 @@ final householdInvitesProvider =
       ).fetchActiveInvites(householdId);
     });
 
-final householdSummaryProvider = FutureProvider.autoDispose
-    .family<HouseholdSummary, String>((ref, householdId) {
+final householdSummaryProvider =
+    FutureProvider.family<HouseholdSummary, String>((ref, householdId) {
       return HouseholdDashboardRepository(
         supabaseClient,
       ).fetchSummary(householdId);
     });
 
-final householdMembersProvider = FutureProvider.autoDispose
-    .family<List<HouseholdMemberInfo>, String>((ref, householdId) {
+final householdMembersProvider =
+    FutureProvider.family<List<HouseholdMemberInfo>, String>((
+      ref,
+      householdId,
+    ) {
       return HouseholdDashboardRepository(
         supabaseClient,
       ).fetchMembers(householdId);
     });
 
-final householdRecentActivityProvider = FutureProvider.autoDispose
-    .family<List<HouseholdEvent>, String>((ref, householdId) {
+final householdRecentActivityProvider =
+    FutureProvider.family<List<HouseholdEvent>, String>((ref, householdId) {
       return HouseholdDashboardRepository(
         supabaseClient,
       ).fetchRecentActivity(householdId);
     });
 
-final householdAllActivityProvider = FutureProvider.autoDispose
-    .family<List<HouseholdEvent>, String>((ref, householdId) {
+final householdAllActivityProvider =
+    FutureProvider.family<List<HouseholdEvent>, String>((ref, householdId) {
       return HouseholdDashboardRepository(
         supabaseClient,
       ).fetchActivity(householdId);
     });
 
-final householdStatsProvider = FutureProvider.autoDispose
-    .family<HouseholdStats, HouseholdStatsRequest>((ref, request) {
+final householdStatsProvider =
+    FutureProvider.family<HouseholdStats, HouseholdStatsRequest>((
+      ref,
+      request,
+    ) {
       return HouseholdStatsRepository(
         supabaseClient,
       ).fetchStats(householdId: request.householdId, period: request.period);
     });
 
-final taskRotationSuggestionsProvider = FutureProvider.autoDispose
-    .family<List<TaskRotationSuggestion>, String>((ref, householdId) {
+final taskRotationSuggestionsProvider =
+    FutureProvider.family<List<TaskRotationSuggestion>, String>((
+      ref,
+      householdId,
+    ) {
       return HouseholdStatsRepository(
         supabaseClient,
       ).fetchRotationSuggestions(householdId: householdId);

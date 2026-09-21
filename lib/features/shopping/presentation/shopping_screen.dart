@@ -14,7 +14,6 @@ import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/app_section_header.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/core/widgets/app_state_switcher.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
@@ -136,16 +135,11 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
                 data: (items) => items.isEmpty ? 'empty' : 'data',
               ),
               child: SafeArea(
+                top: false,
                 bottom: false,
                 child: itemsAsync.when(
                   loading: () => ListView(
-                    children: const [
-                      header,
-                      AppSkeletonList(
-                        sectionCounts: {'': 5},
-                        scrollable: false,
-                      ),
-                    ],
+                    children: const [header, _ShoppingLoadingBody()],
                   ),
                   error: (_, _) => ListView(
                     children: [
@@ -264,6 +258,21 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     showDialog<void>(
       context: context,
       builder: (_) => _ShoppingItemDialog(item: item),
+    );
+  }
+}
+
+class _ShoppingLoadingBody extends StatelessWidget {
+  const _ShoppingLoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.xl,
+      ),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 }

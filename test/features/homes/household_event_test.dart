@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:household_os/app/theme/app_theme.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/features/homes/domain/household.dart';
 import 'package:household_os/features/homes/domain/household_event.dart';
 import 'package:household_os/features/homes/domain/household_invite.dart';
@@ -378,7 +377,7 @@ void main() {
   });
 
   group('ActivityScreen widget', () {
-    testWidgets('shows skeleton loading state while stream is pending', (
+    testWidgets('shows real screen shell with local loading while pending', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -394,7 +393,8 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byType(AppSkeletonList), findsOneWidget);
+      expect(find.text('Activity'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('shows empty state when no events', (tester) async {
@@ -566,7 +566,7 @@ void main() {
       expect(withShell, navBarHeight + AppSpacing.base);
     });
 
-    testWidgets('shows skeleton loading state while stream is pending', (
+    testWidgets('shows real screen shell with local loading while pending', (
       tester,
     ) async {
       final provider = householdMembersProvider('test-hh');
@@ -586,7 +586,8 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.byType(AppSkeletonList), findsOneWidget);
+      expect(find.text('Members'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('shows member display name', (tester) async {

@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:household_os/app/theme/app_theme.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_empty_state.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/features/shopping/data/shopping_repository.dart';
 import 'package:household_os/features/shopping/domain/shopping_item.dart';
 import 'package:household_os/features/shopping/presentation/shopping_provider.dart';
@@ -287,14 +286,16 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('shows skeleton loading state while stream is pending', (
+    testWidgets('shows real screen shell with local loading while pending', (
       tester,
     ) async {
       final controller = StreamController<List<ShoppingItem>>();
       addTearDown(controller.close);
       await tester.pumpWidget(buildScreen(controller.stream));
       await tester.pump();
-      expect(find.byType(AppSkeletonList), findsOneWidget);
+      expect(find.text('Shopping'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('multiple items all render', (tester) async {

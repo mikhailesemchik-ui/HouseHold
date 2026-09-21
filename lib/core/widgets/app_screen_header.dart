@@ -53,6 +53,13 @@ class AppScreenHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // The screen's own scrollable now owns the full viewport, including
+        // the status-bar band (see the `SafeArea(top: false, ...)` change at
+        // each call site) — so scrolled content can visually pass under the
+        // top status-bar haze instead of that band being permanently empty.
+        // This spacer keeps the header itself sitting exactly where it did
+        // when a `SafeArea(top: true)` used to reserve the same space.
+        SizedBox(height: MediaQuery.paddingOf(context).top),
         SizedBox(
           height: AppBarMetrics.toolbarHeight,
           child: Row(

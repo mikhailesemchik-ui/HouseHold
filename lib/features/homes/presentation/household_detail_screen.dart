@@ -17,7 +17,6 @@ import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_icon_chip.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/app_section_header.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/homes/data/household_repository.dart';
@@ -126,6 +125,12 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
     final activityAsync = ref.watch(
       householdRecentActivityProvider(widget.householdId),
     );
+    final cachedHousehold = ref
+        .watch(homesProvider)
+        .asData
+        ?.value
+        .where((household) => household.id == widget.householdId)
+        .firstOrNull;
     final tokens = context.tokens;
 
     // The header is ordinary scrollable content now (not a pinned
@@ -138,9 +143,9 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
     final header = AppScreenHeader(
       leading: const Center(child: AppBackButton()),
       title: householdAsync.when(
-        data: (h) => h?.name ?? 'Home',
-        loading: () => 'Loading...',
-        error: (_, _) => 'Home',
+        data: (h) => h?.name ?? cachedHousehold?.name ?? 'Home',
+        loading: () => cachedHousehold?.name ?? 'Home',
+        error: (_, _) => cachedHousehold?.name ?? 'Home',
       ),
       actions: [
         Padding(
@@ -219,12 +224,22 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
 
     return Scaffold(
       body: SafeArea(
+        top: false,
         bottom: false,
         child: householdAsync.when(
           loading: () => ListView(
+            padding: EdgeInsets.only(
+              top: AppSpacing.sm,
+              bottom: context.shellBottomInset,
+            ),
             children: [
               header,
-              const AppSkeletonList(sectionCounts: {'': 4}, scrollable: false),
+              _DashboardLoadingContent(
+                householdId: widget.householdId,
+                tokens: tokens,
+                isCreatingInvite: _isCreatingInvite,
+                onCreateInvite: _createInvite,
+              ),
             ],
           ),
           error: (_, _) => ListView(
@@ -451,6 +466,128 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
   static String _countLabel(int count, String noun) {
     if (count == 1) return '1 $noun';
     return '$count ${noun}s';
+  }
+}
+
+class _DashboardLoadingContent extends StatelessWidget {
+  const _DashboardLoadingContent({
+    required this.householdId,
+    required this.tokens,
+    required this.isCreatingInvite,
+    required this.onCreateInvite,
+  });
+
+  final String householdId;
+  final AppTokens tokens;
+  final bool isCreatingInvite;
+  final VoidCallback onCreateInvite;
+
+  @override
+  Widget build(BuildContext context) {
+    final hid = householdId;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.base,
+            vertical: AppSpacing.sm,
+          ),
+          child: _TileRow(
+            children: [
+              _PrimaryTile(
+                icon: Icons.checklist_rounded,
+                accent: tokens.tasks,
+                label: 'Tasks',
+                count: null,
+                unitSingular: 'incomplete task',
+                unitPlural: 'incomplete tasks',
+                onTap: () => context.go('/homes/$hid/tasks'),
+              ),
+              _PrimaryTile(
+                icon: Icons.shopping_cart_rounded,
+                accent: tokens.shopping,
+                label: 'Shopping',
+                count: null,
+                unitSingular: 'incomplete item',
+                unitPlural: 'incomplete items',
+                onTap: () => context.go('/homes/$hid/shopping'),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.base,
+            0,
+            AppSpacing.base,
+            AppSpacing.sm,
+          ),
+          child: _TileRow(
+            children: [
+              _QuietTile(
+                icon: Icons.receipt_long_rounded,
+                accent: tokens.expenses,
+                label: 'Expenses',
+                status: null,
+                onTap: () => context.go('/homes/$hid/expenses'),
+              ),
+              _QuietTile(
+                icon: Icons.people_rounded,
+                accent: tokens.members,
+                label: 'Members',
+                status: null,
+                onTap: () => context.go('/homes/$hid/members'),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.base,
+            0,
+            AppSpacing.base,
+            AppSpacing.sm,
+          ),
+          child: _StatisticsRow(
+            accent: tokens.statistics,
+            onTap: () => context.go('/homes/$hid/statistics'),
+          ),
+        ),
+        const AppSectionHeader(label: 'Recent activity'),
+        const _DashboardInlineLoading(),
+        const AppSectionHeader(label: 'Invites'),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.base,
+            vertical: AppSpacing.xs,
+          ),
+          child: OutlinedButton(
+            onPressed: isCreatingInvite ? null : onCreateInvite,
+            child: isCreatingInvite
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Invite member'),
+          ),
+        ),
+        const _DashboardInlineLoading(),
+      ],
+    );
+  }
+}
+
+class _DashboardInlineLoading extends StatelessWidget {
+  const _DashboardInlineLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.all(AppSpacing.base),
+      child: Center(child: CircularProgressIndicator()),
+    );
   }
 }
 

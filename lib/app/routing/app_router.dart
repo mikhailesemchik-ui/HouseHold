@@ -221,6 +221,8 @@ class _ShellScaffoldState extends State<_ShellScaffold>
     }
     _keyboardWasOpen = keyboardOpen;
 
+    final navVisible = widget.showNav && !keyboardOpen;
+
     return Scaffold(
       // Transparent so the single `AppBackground` layer below shows through
       // with no seam at the Scaffold's own background. `AppBackground` is
@@ -257,16 +259,30 @@ class _ShellScaffoldState extends State<_ShellScaffold>
       // already relied on for the keyboard case — Scaffold's own layout
       // (see `_BodyBuilder`) then falls the body's `MediaQuery.padding.bottom`
       // back to the device's own safe-area inset, never to a phantom gap.
-      bottomNavigationBar: (keyboardOpen || !widget.showNav)
-          ? null
-          : _FloatingNavShell(
-              selectedIndex: widget.navigationShell.currentIndex,
-              // Re-tapping the current branch returns to its root route.
-              onDestinationSelected: (index) => widget.navigationShell.goBranch(
-                index,
-                initialLocation: index == widget.navigationShell.currentIndex,
-              ),
-            ),
+      bottomNavigationBar: navVisible
+          ? Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: _BottomNavHaze.height,
+                  child: _BottomNavHaze(),
+                ),
+                _FloatingNavShell(
+                  selectedIndex: widget.navigationShell.currentIndex,
+                  // Re-tapping the current branch returns to its root route.
+                  onDestinationSelected: (index) =>
+                      widget.navigationShell.goBranch(
+                        index,
+                        initialLocation:
+                            index == widget.navigationShell.currentIndex,
+                      ),
+                ),
+              ],
+            )
+          : null,
     );
   }
 }
@@ -302,6 +318,35 @@ class _FloatingNavShell extends StatelessWidget {
         child: _GlassNavBar(
           selectedIndex: selectedIndex,
           onDestinationSelected: onDestinationSelected,
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomNavHaze extends StatelessWidget {
+  const _BottomNavHaze();
+
+  static const double height = 120;
+  static const _warmCream = Color(0xFFFBFAF6);
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: const [0.0, 0.25, 0.50, 0.68, 1.0],
+            colors: [
+              _warmCream.withValues(alpha: 0.0),
+              _warmCream.withValues(alpha: 0.06),
+              _warmCream.withValues(alpha: 0.16),
+              _warmCream.withValues(alpha: 0.22),
+              _warmCream.withValues(alpha: 0.16),
+            ],
+          ),
         ),
       ),
     );

@@ -218,6 +218,19 @@ void main() {
     });
   });
 
+  group('page transitions', () {
+    test('android fallback surface stays transparent for shell background', () {
+      final builder =
+          appTheme.pageTransitionsTheme.builders[TargetPlatform.android];
+
+      expect(builder, isA<PredictiveBackPageTransitionsBuilder>());
+      expect(
+        (builder! as PredictiveBackPageTransitionsBuilder).fallbackColor,
+        Colors.transparent,
+      );
+    });
+  });
+
   test('fontFamily is Nunito', () {
     expect(appTheme.textTheme.bodyMedium!.fontFamily, 'Nunito');
   });

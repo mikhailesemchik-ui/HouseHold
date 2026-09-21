@@ -351,6 +351,18 @@ final appTheme = ThemeData(
     titleSpacing: AppBarMetrics.titleSpacing,
     actionsPadding: AppBarMetrics.actionsPadding,
   ),
+  // Android's default Material page transition paints ColorScheme.surface as
+  // a fallback layer while pushed routes enter. In-shell pages are transparent
+  // by design so the shell-root AppBackground can show through; keep that
+  // transition fallback transparent too, otherwise nested routes briefly flash
+  // the flat warm surface before the sage background is visible.
+  pageTransitionsTheme: const PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
+        fallbackColor: Colors.transparent,
+      ),
+    },
+  ),
   // M3's auto-derived FAB defaults to `primaryContainer`, which reads as a
   // brighter, minty tone than the rest of the interface — the same solid
   // green as FilledButton keeps the primary-create-action visually

@@ -38,6 +38,7 @@ class ProfileScreen extends ConsumerWidget {
       body: profileAsync.when(
         data: (profile) => _ProfileBody(header: header, profile: profile),
         loading: () => SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
             children: const [
@@ -50,6 +51,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
         ),
         error: (_, _) => SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
             children: const [
@@ -306,10 +308,12 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
     final avatarUrl = widget.profile.avatarUrl;
 
     return ListView(
-      // No explicit padding, so the list consumes `MediaQuery.padding`
-      // itself — top (the status-bar inset the removed `AppBar` used to
-      // consume) as well as bottom (the shell's measured nav bar height,
-      // exactly the clearance the last settings row needs).
+      // Explicit padding: bottom only (the shell's measured nav bar height,
+      // exactly the clearance the last settings row needs). The top inset is
+      // deliberately NOT consumed here — `AppScreenHeader` reserves its own
+      // top spacing, so this list's viewport can extend to the physical
+      // screen edge and let scrolled content pass under the status-bar haze.
+      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
       children: [
         widget.header,
         const SizedBox(height: AppSpacing.xl),

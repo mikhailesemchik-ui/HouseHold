@@ -3,7 +3,6 @@ import 'dart:async' show Completer;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/features/homes/domain/household_stats.dart';
 import 'package:household_os/features/homes/domain/task_rotation_suggestion.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
@@ -78,15 +77,18 @@ void main() {
     );
   }
 
-  testWidgets('shows skeleton loading state while statistics load', (
-    tester,
-  ) async {
-    final completer = Completer<HouseholdStats>();
-    await tester.pumpWidget(buildScreen(() => completer.future));
-    await tester.pump();
+  testWidgets(
+    'shows real screen shell with local loading while statistics load',
+    (tester) async {
+      final completer = Completer<HouseholdStats>();
+      await tester.pumpWidget(buildScreen(() => completer.future));
+      await tester.pump();
 
-    expect(find.byType(AppSkeletonList), findsOneWidget);
-  });
+      expect(find.text('Statistics'), findsOneWidget);
+      expect(find.text('30 days'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    },
+  );
 
   testWidgets('shows empty state when there are no completions', (
     tester,

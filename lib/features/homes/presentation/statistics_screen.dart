@@ -9,7 +9,6 @@ import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/features/homes/data/household_stats_repository.dart';
 import 'package:household_os/features/homes/domain/household_stats.dart';
@@ -104,12 +103,17 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
     return Scaffold(
       body: SafeArea(
+        top: false,
         bottom: false,
         child: statsAsync.when(
           loading: () => ListView(
-            children: const [
+            padding: EdgeInsets.zero,
+            children: [
               header,
-              AppSkeletonList(sectionCounts: {'': 4}, scrollable: false),
+              _StatisticsLoadingContent(
+                selected: _period,
+                onPeriodChanged: (period) => setState(() => _period = period),
+              ),
             ],
           ),
           error: (_, _) => ListView(
@@ -176,6 +180,35 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _StatisticsLoadingContent extends StatelessWidget {
+  const _StatisticsLoadingContent({
+    required this.selected,
+    required this.onPeriodChanged,
+  });
+
+  final HouseholdStatsPeriod selected;
+  final ValueChanged<HouseholdStatsPeriod> onPeriodChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: AppSpacing.base,
+        right: AppSpacing.base,
+        top: AppSpacing.md,
+        bottom: context.shellBottomInset + AppSpacing.md,
+      ),
+      child: Column(
+        children: [
+          _PeriodSelector(selected: selected, onChanged: onPeriodChanged),
+          const SizedBox(height: AppSpacing.xl),
+          const Center(child: CircularProgressIndicator()),
+        ],
       ),
     );
   }

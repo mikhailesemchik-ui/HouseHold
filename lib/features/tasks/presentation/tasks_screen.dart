@@ -10,7 +10,6 @@ import 'package:household_os/core/widgets/app_pressable_scale.dart';
 import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/tasks/data/task_repository.dart';
@@ -32,8 +31,12 @@ TasksLoadState resolveTasksLoadState(
   AsyncValue<List<Task>> tasksAsync,
   AsyncValue<List<TaskOccurrence>> occurrencesAsync,
 ) {
-  if (tasksAsync.isLoading) return TasksLoadState.loading;
-  if (tasksAsync.hasError) return TasksLoadState.tasksError;
+  if (!tasksAsync.hasValue && tasksAsync.isLoading) {
+    return TasksLoadState.loading;
+  }
+  if (!tasksAsync.hasValue && tasksAsync.hasError) {
+    return TasksLoadState.tasksError;
+  }
   return TasksLoadState.ready;
 }
 
@@ -73,17 +76,35 @@ class _TasksBody extends ConsumerWidget {
 
     switch (resolveTasksLoadState(tasksAsync, occurrencesAsync)) {
       case TasksLoadState.loading:
-        return SafeArea(
-          bottom: false,
-          child: ListView(
-            children: const [
-              header,
-              AppSkeletonList(sectionCounts: {'': 5}, scrollable: false),
-            ],
-          ),
+        return Stack(
+          children: [
+            SafeArea(
+              top: false,
+              bottom: false,
+              child: ListView(
+                padding: EdgeInsets.only(
+                  bottom: context.shellBottomInset + kFabClearance,
+                ),
+                children: const [header, _TasksLoadingBody()],
+              ),
+            ),
+            Positioned(
+              right: AppSpacing.base,
+              bottom: context.shellBottomInset + AppSpacing.base,
+              child: AppPressableScale(
+                child: FloatingActionButton.extended(
+                  onPressed: () =>
+                      _openTaskForm(context, householdId: householdId),
+                  label: const Text('Add task'),
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ),
+            ),
+          ],
         );
       case TasksLoadState.tasksError:
         return SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
             children: [
@@ -114,6 +135,7 @@ class _TasksBody extends ConsumerWidget {
 
     if (isEmpty) {
       return SafeArea(
+        top: false,
         bottom: false,
         child: ListView(
           children: [
@@ -134,6 +156,7 @@ class _TasksBody extends ConsumerWidget {
     return Stack(
       children: [
         SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
             // Explicit padding opts out of automatic MediaQuery
@@ -210,6 +233,21 @@ class _TasksBody extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _TasksLoadingBody extends StatelessWidget {
+  const _TasksLoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.xl,
+      ),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 }

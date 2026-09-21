@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:household_os/app/theme/app_shell_metrics.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/features/tasks/data/task_repository.dart';
 import 'package:household_os/features/tasks/domain/recurrence_type.dart';
 import 'package:household_os/features/tasks/domain/task.dart';
@@ -175,14 +174,19 @@ void main() {
       expect(textWidget.style?.decoration, TextDecoration.lineThrough);
     });
 
-    testWidgets('shows skeleton loading state while stream is pending', (
+    testWidgets('shows real screen shell with local loading while pending', (
       tester,
     ) async {
       final controller = StreamController<List<Task>>();
       addTearDown(controller.close);
       await tester.pumpWidget(buildScreen(tasksStream: controller.stream));
       await tester.pump();
-      expect(find.byType(AppSkeletonList), findsOneWidget);
+      expect(find.text('Tasks'), findsOneWidget);
+      expect(
+        find.widgetWithText(FloatingActionButton, 'Add task'),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('empty state offers an Add task action', (tester) async {
@@ -334,14 +338,14 @@ void main() {
       expect(positioned.bottom, greaterThanOrEqualTo(navBarHeight));
     });
 
-    testWidgets('no FAB while the tasks stream is still loading', (
+    testWidgets('FAB is present while the tasks stream is still loading', (
       tester,
     ) async {
       final controller = StreamController<List<Task>>();
       addTearDown(controller.close);
       await tester.pumpWidget(buildScreen(tasksStream: controller.stream));
       await tester.pump();
-      expect(find.byType(FloatingActionButton), findsNothing);
+      expect(find.byType(FloatingActionButton), findsOneWidget);
     });
 
     testWidgets('no FAB when the tasks stream errors', (tester) async {

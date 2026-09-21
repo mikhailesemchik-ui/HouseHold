@@ -8,7 +8,6 @@ import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
-import 'package:household_os/core/widgets/app_skeleton_list.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/features/homes/data/household_repository.dart';
 import 'package:household_os/features/homes/domain/household_member_info.dart';
@@ -58,15 +57,12 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
     return Scaffold(
       body: membersAsync.when(
         loading: () => SafeArea(
+          top: false,
           bottom: false,
-          child: ListView(
-            children: const [
-              header,
-              AppSkeletonList(sectionCounts: {'': 5}, scrollable: false),
-            ],
-          ),
+          child: ListView(children: const [header, _MembersLoadingBody()]),
         ),
         error: (_, _) => SafeArea(
+          top: false,
           bottom: false,
           child: ListView(
             children: [
@@ -83,6 +79,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
         data: (members) {
           if (members.isEmpty) {
             return SafeArea(
+              top: false,
               bottom: false,
               child: ListView(
                 children: const [
@@ -101,6 +98,7 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
           final canManageMembers = currentMember?.isOwner ?? false;
 
           return SafeArea(
+            top: false,
             bottom: false,
             child: ListView.separated(
               padding: EdgeInsets.only(
@@ -247,6 +245,21 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
   void _refreshHouseholdMembers() {
     ref.invalidate(householdMembersProvider(widget.householdId));
     ref.invalidate(householdSummaryProvider(widget.householdId));
+  }
+}
+
+class _MembersLoadingBody extends StatelessWidget {
+  const _MembersLoadingBody();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.xl,
+      ),
+      child: Center(child: CircularProgressIndicator()),
+    );
   }
 }
 
