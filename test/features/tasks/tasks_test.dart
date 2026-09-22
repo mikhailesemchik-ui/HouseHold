@@ -174,6 +174,35 @@ void main() {
       expect(textWidget.style?.decoration, TextDecoration.lineThrough);
     });
 
+    // RT-001 regression: the actual bug lives in Postgres/Realtime config
+    // (a filtered DELETE subscription silently drops events without
+    // `REPLICA IDENTITY FULL` — see the tasks migration), which cannot be
+    // reproduced by a widget test since no real Postgres/Realtime server is
+    // involved here. What CAN be verified deterministically at this layer
+    // is the consumer side: if the stream ever does emit a list with the
+    // task removed — exactly what correct realtime delivery looks like once
+    // the migration is applied — the screen must remove the row on that
+    // same emission. Mirrors the equivalent Shopping regression test.
+    testWidgets(
+      'deleting a task on the same live stream removes it from the screen',
+      (tester) async {
+        final controller = StreamController<List<Task>>();
+        addTearDown(controller.close);
+        await tester.pumpWidget(buildScreen(tasksStream: controller.stream));
+
+        controller.add([makeTask(id: '1', title: 'QA Realtime Delete Task')]);
+        await tester.pump();
+        expect(find.text('QA Realtime Delete Task'), findsOneWidget);
+
+        // Delete: mirrors what `deleteTask`'s DELETE produces once realtime
+        // delivers it — the row simply stops appearing in the emitted list.
+        controller.add(const []);
+        await tester.pump();
+        expect(find.text('QA Realtime Delete Task'), findsNothing);
+        expect(find.text('No tasks yet'), findsOneWidget);
+      },
+    );
+
     testWidgets('shows real screen shell with local loading while pending', (
       tester,
     ) async {

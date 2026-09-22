@@ -1,0 +1,26 @@
+-- FUNC-001: shopping_items realtime DELETE events were silently dropped for
+-- the app's filtered subscription (`.eq('household_id', ...)` combined with
+-- postgres_changes DELETE tracking).
+--
+-- Root cause: Postgres's default replica identity for a table only includes
+-- its primary key in the row image Realtime evaluates for UPDATE/DELETE
+-- events. shopping_items' delete RLS policy (and the client's `household_id`
+-- filter) both need `household_id` — a non-primary-key column — to decide
+-- whether a given DELETE is visible to a subscriber. Without that column
+-- present in the change payload, Realtime cannot evaluate the filter/policy
+-- and drops the event for that subscriber, even though the DELETE itself
+-- commits successfully. Supabase's own docs state this directly: "You can
+-- only filter Delete events when tracking Postgres Changes if the table has
+-- the replica identity set to full."
+--
+-- Reopen (UPDATE, completed -> active) does not have this problem: filtering
+-- UPDATE events does not require full replica identity, because the *new*
+-- row (which always carries every column, regardless of replica identity)
+-- is what both the client filter and RLS evaluate.
+--
+-- Scoped to shopping_items only — this is the one table this bug was
+-- actually reproduced and proven against. tasks, task_occurrences, expenses,
+-- and expense_settlements use the identical filtered-stream + delete-RLS
+-- pattern and carry the same theoretical risk, but are left untouched here
+-- pending their own reproduction/decision.
+alter table shopping_items replica identity full;

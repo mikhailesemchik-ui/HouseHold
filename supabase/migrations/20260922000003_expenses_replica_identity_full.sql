@@ -1,0 +1,17 @@
+-- RT-002: expenses realtime DELETE events were silently dropped for the
+-- app's filtered subscription (`.eq('household_id', ...)` combined with
+-- postgres_changes DELETE tracking) — the same mechanism proven and fixed
+-- for shopping_items (20260922000001) and tasks (20260922000002).
+--
+-- expenses' delete RLS policy (expenses_delete_active_member, using
+-- is_active_household_member(household_id)) and the client's household_id
+-- filter both need household_id — a non-primary-key column — present in the
+-- DELETE change payload to decide whether the event is visible to a given
+-- subscriber. Without full replica identity, that column isn't included and
+-- Realtime drops the event for that subscriber, even though the DELETE
+-- itself commits successfully.
+--
+-- Scoped to expenses only. expense_settlements and task_occurrences carry
+-- the same theoretical risk but are left untouched here pending their own
+-- reproduction/decision.
+alter table expenses replica identity full;

@@ -298,6 +298,60 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
+    // FUNC-001 regression: the actual bug lives in Postgres/Realtime config
+    // (a filtered DELETE subscription silently drops events without
+    // `REPLICA IDENTITY FULL` — see the shopping_items migration), which
+    // cannot be reproduced by a widget test since no real Postgres/Realtime
+    // server is involved here. What CAN be verified deterministically at
+    // this layer is the consumer side: if the stream ever does emit an
+    // updated list reflecting a reopen or a delete — which is exactly what
+    // a correct realtime delivery looks like once the migration is applied
+    // — the screen must re-section/remove the item on that same emission,
+    // with no stale rendering of its own. This guards the one part of the
+    // pipeline actually reachable from Flutter tests.
+    testWidgets(
+      'reopening then deleting a completed item on the same live stream '
+      'updates the screen on each emission',
+      (tester) async {
+        final controller = StreamController<List<ShoppingItem>>();
+        addTearDown(controller.close);
+        await tester.pumpWidget(buildScreen(controller.stream));
+
+        final completedItem = makeItem(
+          id: '1',
+          name: 'QA Shopping Item',
+          completedAt: DateTime.utc(2026, 8, 27, 14),
+          completedBy: 'u',
+        );
+        controller.add([completedItem]);
+        await tester.pump();
+        expect(find.text('Completed · 1'), findsOneWidget);
+        final completedText = tester.widget<Text>(
+          find.text('QA Shopping Item'),
+        );
+        expect(completedText.style?.decoration, TextDecoration.lineThrough);
+
+        // Reopen: same id, completedAt/completedBy now null — mirrors what
+        // `reopenItem`'s UPDATE produces once realtime delivers it.
+        final reopenedItem = makeItem(id: '1', name: 'QA Shopping Item');
+        controller.add([reopenedItem]);
+        await tester.pump();
+        expect(find.text('Completed · 1'), findsNothing);
+        final reopenedText = tester.widget<Text>(find.text('QA Shopping Item'));
+        expect(
+          reopenedText.style?.decoration,
+          isNot(TextDecoration.lineThrough),
+        );
+
+        // Delete: mirrors what `deleteItem`'s DELETE produces once realtime
+        // delivers it — the row simply stops appearing in the emitted list.
+        controller.add(const []);
+        await tester.pump();
+        expect(find.text('QA Shopping Item'), findsNothing);
+        expect(find.text('Nothing on the list.'), findsOneWidget);
+      },
+    );
+
     testWidgets('multiple items all render', (tester) async {
       final items = [
         makeItem(id: '1', name: 'Apples'),
