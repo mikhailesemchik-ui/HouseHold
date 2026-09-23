@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -421,6 +423,88 @@ void main() {
         expect(find.text('Feed cat'), findsOneWidget);
         expect(find.text('Could not load scheduled tasks.'), findsOneWidget);
         expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // OCC-001 regression: the actual bug lives in Postgres/Realtime config (a
+  // filtered DELETE subscription silently drops events without `REPLICA
+  // IDENTITY FULL` — see the task_occurrences migration), which cannot be
+  // reproduced by a widget test since no real Postgres/Realtime server is
+  // involved here. What CAN be verified deterministically at this layer is
+  // the consumer side: if the stream ever does emit a list with the obsolete
+  // occurrence replaced by the regenerated one — exactly what correct
+  // realtime delivery looks like once the migration is applied — the screen
+  // must render exactly the new set, with no stale row retained and no
+  // duplicate. Mirrors the equivalent Shopping/Tasks/Expenses tests.
+  group('TasksScreen — occurrence regeneration (same live stream)', () {
+    Widget buildScreen({
+      required List<Task> tasks,
+      required Stream<List<TaskOccurrence>> occurrencesStream,
+    }) {
+      return ProviderScope(
+        overrides: [
+          tasksStreamProvider('hh').overrideWith((ref) => Stream.value(tasks)),
+          taskMembersProvider(
+            'hh',
+          ).overrideWith((ref) => Future.value(<TaskMember>[])),
+          occurrencesStreamProvider(
+            'hh',
+          ).overrideWith((ref) => occurrencesStream),
+        ],
+        child: const MaterialApp(home: TasksScreen(householdId: 'hh')),
+      );
+    }
+
+    testWidgets(
+      'regenerating an occurrence on the same live stream leaves exactly '
+      'one row per occurrence — no stale row, no duplicate',
+      (tester) async {
+        final task = makeTask(
+          id: 'task-1',
+          title: 'QA Recurrence Realtime Fix',
+          dueAt: futureUtc,
+        );
+        final controller = StreamController<List<TaskOccurrence>>();
+        addTearDown(controller.close);
+
+        await tester.pumpWidget(
+          buildScreen(tasks: [task], occurrencesStream: controller.stream),
+        );
+
+        // Initial state: a retained (past-like) occurrence plus the
+        // currently-due one — mirrors the physically reproduced Sep 22 +
+        // Sep 24 state.
+        final retained = makeOccurrence(id: 'occ-retained', taskId: 'task-1');
+        final obsolete = makeOccurrence(id: 'occ-obsolete', taskId: 'task-1');
+        controller.add([retained, obsolete]);
+        await tester.pump();
+        expect(
+          find.text('QA Recurrence Realtime Fix'),
+          findsNWidgets(2),
+          reason:
+              'both the retained and the soon-to-be-obsolete occurrence '
+              'should render as their own row',
+        );
+
+        // Regeneration: mirrors what _generate_occurrences_for_task's
+        // DELETE (of the obsolete row) + INSERT (of the replacement)
+        // produce once realtime delivers both events — the obsolete row
+        // simply stops appearing and the replacement takes its place.
+        final replacement = makeOccurrence(
+          id: 'occ-replacement',
+          taskId: 'task-1',
+        );
+        controller.add([retained, replacement]);
+        await tester.pump();
+        expect(
+          find.text('QA Recurrence Realtime Fix'),
+          findsNWidgets(2),
+          reason:
+              'exactly the retained row plus the replacement — never 3 '
+              '(stale obsolete + retained + replacement) and never 1',
+        );
       },
     );
   });
