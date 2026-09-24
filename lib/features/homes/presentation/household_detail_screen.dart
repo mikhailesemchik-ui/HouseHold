@@ -36,9 +36,14 @@ const _kMembershipEventTypes = {
 };
 
 class HouseholdDetailScreen extends ConsumerStatefulWidget {
-  const HouseholdDetailScreen({super.key, required this.householdId});
+  const HouseholdDetailScreen({
+    super.key,
+    required this.householdId,
+    this.currentUserIdOverride,
+  });
 
   final String householdId;
+  final String? currentUserIdOverride;
 
   @override
   ConsumerState<HouseholdDetailScreen> createState() =>
@@ -49,6 +54,9 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
   bool _isCreatingInvite = false;
 
   HouseholdRepository get _repo => HouseholdRepository(supabaseClient);
+
+  String? get _currentUserId =>
+      widget.currentUserIdOverride ?? supabaseClient.auth.currentUser?.id;
 
   Future<void> _createInvite() async {
     if (_isCreatingInvite) return;
@@ -137,6 +145,15 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
     final activityAsync = ref.watch(
       householdRecentActivityProvider(widget.householdId),
     );
+    // Only owners may create/revoke/read invites (server-enforced), so the
+    // whole Invites section is owner-only. Hidden until the role is known.
+    final isOwner =
+        ref
+            .watch(householdMembersProvider(widget.householdId))
+            .asData
+            ?.value
+            .any((m) => m.userId == _currentUserId && m.isOwner) ??
+        false;
 
     // TWO-001: household_events is the one realtime-enabled signal that
     // fires on every remote membership change. A new row means the member/
@@ -455,44 +472,46 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
                 // ── Invites section ───────────────────────────────────────
                 // Secondary to the daily feed above: an occasional owner action,
                 // not something the user checks every visit.
-                const AppSectionHeader(label: 'Invites'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.base,
-                    vertical: AppSpacing.xs,
+                if (isOwner) ...[
+                  const AppSectionHeader(label: 'Invites'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.base,
+                      vertical: AppSpacing.xs,
+                    ),
+                    child: OutlinedButton(
+                      onPressed: _isCreatingInvite ? null : _createInvite,
+                      child: _isCreatingInvite
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Invite member'),
+                    ),
                   ),
-                  child: OutlinedButton(
-                    onPressed: _isCreatingInvite ? null : _createInvite,
-                    child: _isCreatingInvite
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                  invitesAsync.when(
+                    loading: () => const Padding(
+                      padding: EdgeInsets.all(AppSpacing.base),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (_, _) => _InlineSectionError(
+                      message: 'Could not load invites.',
+                      onRetry: () =>
+                          ref.invalidate(householdInvitesProvider(hid)),
+                    ),
+                    data: (invites) => Column(
+                      children: invites
+                          .map(
+                            (i) => _InviteRow(
+                              invite: i,
+                              onRevoke: () => _revokeInvite(i.id),
+                            ),
                           )
-                        : const Text('Invite member'),
+                          .toList(),
+                    ),
                   ),
-                ),
-                invitesAsync.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.all(AppSpacing.base),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (_, _) => _InlineSectionError(
-                    message: 'Could not load invites.',
-                    onRetry: () =>
-                        ref.invalidate(householdInvitesProvider(hid)),
-                  ),
-                  data: (invites) => Column(
-                    children: invites
-                        .map(
-                          (i) => _InviteRow(
-                            invite: i,
-                            onRevoke: () => _revokeInvite(i.id),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
+                ],
               ],
             );
           },

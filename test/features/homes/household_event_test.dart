@@ -128,11 +128,15 @@ Widget buildActivityScreen(
 Widget buildDashboardScreen({
   double? navBarHeight,
   List<HouseholdInvite> invites = const [],
+  String role = 'owner',
 }) {
   final recentEvents = [
     makeEvent(eventType: 'expense_created', titleSnapshot: 'Electricity'),
   ];
-  const screen = HouseholdDetailScreen(householdId: 'test-hh');
+  const screen = HouseholdDetailScreen(
+    householdId: 'test-hh',
+    currentUserIdOverride: 'user-1',
+  );
   return ProviderScope(
     overrides: [
       householdByIdProvider('test-hh').overrideWith(
@@ -146,6 +150,9 @@ Widget buildDashboardScreen({
       householdSummaryProvider(
         'test-hh',
       ).overrideWith((ref) async => _testSummary),
+      householdMembersProvider(
+        'test-hh',
+      ).overrideWith((ref) async => [makeMember(userId: 'user-1', role: role)]),
       householdInvitesProvider('test-hh').overrideWith((ref) async => invites),
       householdRecentActivityProvider(
         'test-hh',
@@ -1055,6 +1062,9 @@ void main() {
             householdSummaryProvider(
               'test-hh',
             ).overrideWith((ref) async => _testSummary),
+            householdMembersProvider('test-hh').overrideWith(
+              (ref) async => [makeMember(userId: 'user-1', role: 'owner')],
+            ),
             householdInvitesProvider(
               'test-hh',
             ).overrideWith((ref) async => const []),
@@ -1063,7 +1073,10 @@ void main() {
             ).overrideWith((ref) async => throw Exception('boom')),
           ],
           child: const MaterialApp(
-            home: HouseholdDetailScreen(householdId: 'test-hh'),
+            home: HouseholdDetailScreen(
+              householdId: 'test-hh',
+              currentUserIdOverride: 'user-1',
+            ),
           ),
         ),
       );
@@ -1095,6 +1108,9 @@ void main() {
             householdSummaryProvider(
               'test-hh',
             ).overrideWith((ref) async => _testSummary),
+            householdMembersProvider('test-hh').overrideWith(
+              (ref) async => [makeMember(userId: 'user-1', role: 'owner')],
+            ),
             householdInvitesProvider(
               'test-hh',
             ).overrideWith((ref) async => const []),
@@ -1104,7 +1120,10 @@ void main() {
           ],
           child: MaterialApp(
             theme: appTheme,
-            home: const HouseholdDetailScreen(householdId: 'test-hh'),
+            home: const HouseholdDetailScreen(
+              householdId: 'test-hh',
+              currentUserIdOverride: 'user-1',
+            ),
           ),
         ),
       );
@@ -1149,6 +1168,19 @@ void main() {
       expect(find.byTooltip('Copy invite code'), findsNothing);
     });
 
+    // TWO-002: only owners may create invites (server-enforced), so a regular
+    // member must not be shown the Invites section or its create action.
+    testWidgets('a regular member does not see the Invites section', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildDashboardScreen(role: 'member'));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -2000));
+      await tester.pumpAndSettle();
+      expect(find.text('Invites'), findsNothing);
+      expect(find.text('Invite member'), findsNothing);
+    });
+
     testWidgets('copying an invite code gives visible feedback', (
       tester,
     ) async {
@@ -1186,6 +1218,9 @@ void main() {
             householdSummaryProvider(
               'test-hh',
             ).overrideWith((ref) async => _testSummary),
+            householdMembersProvider('test-hh').overrideWith(
+              (ref) async => [makeMember(userId: 'user-1', role: 'owner')],
+            ),
             householdInvitesProvider(
               'test-hh',
             ).overrideWith((ref) async => throw Exception('boom')),
@@ -1194,7 +1229,10 @@ void main() {
             ).overrideWith((ref) async => const []),
           ],
           child: const MaterialApp(
-            home: HouseholdDetailScreen(householdId: 'test-hh'),
+            home: HouseholdDetailScreen(
+              householdId: 'test-hh',
+              currentUserIdOverride: 'user-1',
+            ),
           ),
         ),
       );
@@ -1425,7 +1463,10 @@ void main() {
         var membersFetches = 0;
         var taskMembersFetches = 0;
 
-        const screen = HouseholdDetailScreen(householdId: 'test-hh');
+        const screen = HouseholdDetailScreen(
+          householdId: 'test-hh',
+          currentUserIdOverride: 'user-1',
+        );
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
