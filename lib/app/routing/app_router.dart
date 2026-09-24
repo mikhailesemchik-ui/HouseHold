@@ -9,6 +9,7 @@ import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_background.dart';
 import 'package:household_os/features/homes/presentation/household_detail_screen.dart';
 import 'package:household_os/features/homes/presentation/homes_screen.dart';
+import 'package:household_os/features/homes/presentation/membership_watcher.dart';
 import 'package:household_os/features/profile/presentation/profile_screen.dart';
 import 'package:household_os/features/expenses/presentation/expenses_screen.dart';
 import 'package:household_os/features/homes/presentation/activity_screen.dart';
@@ -250,7 +251,7 @@ class _ShellScaffoldState extends State<_ShellScaffold>
               child: Opacity(opacity: 0.92 + 0.08 * t, child: child),
             );
           },
-          child: widget.navigationShell,
+          child: MembershipWatcher(child: widget.navigationShell),
         ),
       ),
       // Hidden for two independent reasons: a deeper/nested route

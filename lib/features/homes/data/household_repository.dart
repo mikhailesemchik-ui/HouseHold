@@ -13,6 +13,21 @@ class HouseholdRepository {
     return rows.map(Household.fromMap).toList();
   }
 
+  /// Streams which households [userId] is an active member of, from their own
+  /// membership rows only.
+  Stream<Set<String>> watchActiveHouseholdIds(String userId) {
+    return _client
+        .from('household_members')
+        .stream(primaryKey: ['household_id', 'user_id'])
+        .eq('user_id', userId)
+        .map(
+          (rows) => {
+            for (final row in rows)
+              if (row['status'] == 'active') row['household_id'] as String,
+          },
+        );
+  }
+
   Future<Household?> fetchHousehold(String id) async {
     final rows = await _client
         .from('households')

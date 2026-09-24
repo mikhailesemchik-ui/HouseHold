@@ -129,3 +129,14 @@ final taskRotationSuggestionsProvider =
         supabaseClient,
       ).fetchRotationSuggestions(householdId: householdId);
     });
+
+/// Ids of households the current user is an active member of, streamed from
+/// the user's own household_members rows (readable even after removal, unlike
+/// household data). Empty when signed out. See FLOW-001.
+final activeHouseholdIdsProvider = StreamProvider.autoDispose<Set<String>>((
+  ref,
+) {
+  final userId = supabaseClient.auth.currentUser?.id;
+  if (userId == null) return const Stream.empty();
+  return HouseholdRepository(supabaseClient).watchActiveHouseholdIds(userId);
+});
