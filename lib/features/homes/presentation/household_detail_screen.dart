@@ -20,8 +20,20 @@ import 'package:household_os/core/widgets/app_section_header.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/homes/data/household_repository.dart';
+import 'package:household_os/features/homes/domain/household_event.dart';
 import 'package:household_os/features/homes/domain/household_invite.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
+import 'package:household_os/features/tasks/presentation/tasks_provider.dart';
+
+/// household_events event_types that mean membership itself changed, as
+/// opposed to task/shopping/expense activity — only these need to bust the
+/// member/summary caches; every event still refreshes recent activity.
+const _kMembershipEventTypes = {
+  'member_joined',
+  'member_left',
+  'member_removed',
+  'ownership_transferred',
+};
 
 class HouseholdDetailScreen extends ConsumerStatefulWidget {
   const HouseholdDetailScreen({super.key, required this.householdId});
@@ -125,6 +137,32 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
     final activityAsync = ref.watch(
       householdRecentActivityProvider(widget.householdId),
     );
+
+    // TWO-001: household_events is the one realtime-enabled signal that
+    // fires on every remote membership change. A new row means the member/
+    // summary/task-assignee caches below may now be stale, so bust them —
+    // the next watch (on this screen, Members, or the task form) refetches.
+    ref.listen<AsyncValue<List<HouseholdEvent>>>(
+      householdEventsStreamProvider(widget.householdId),
+      (previous, next) {
+        final events = next.asData?.value;
+        final previousEvents = previous?.asData?.value;
+        if (events == null || previousEvents == null) return;
+        final previousIds = previousEvents.map((e) => e.id).toSet();
+        final newEvents = events.where((e) => !previousIds.contains(e.id));
+        if (newEvents.isEmpty) return;
+        ref.invalidate(householdRecentActivityProvider(widget.householdId));
+        ref.invalidate(householdAllActivityProvider(widget.householdId));
+        if (newEvents.any(
+          (e) => _kMembershipEventTypes.contains(e.eventType),
+        )) {
+          ref.invalidate(householdMembersProvider(widget.householdId));
+          ref.invalidate(householdSummaryProvider(widget.householdId));
+          ref.invalidate(taskMembersProvider(widget.householdId));
+        }
+      },
+    );
+
     final cachedHousehold = ref
         .watch(homesProvider)
         .asData

@@ -1,4 +1,4 @@
-import 'dart:async' show Completer;
+import 'dart:async' show Completer, StreamController;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +14,8 @@ import 'package:household_os/features/homes/presentation/activity_screen.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
 import 'package:household_os/features/homes/presentation/household_detail_screen.dart';
 import 'package:household_os/features/homes/presentation/members_screen.dart';
+import 'package:household_os/features/tasks/domain/task_member.dart';
+import 'package:household_os/features/tasks/presentation/tasks_provider.dart';
 
 Map<String, dynamic> baseEventMap({
   String id = 'ev-1',
@@ -42,6 +44,7 @@ Map<String, dynamic> baseEventMap({
 };
 
 HouseholdEvent makeEvent({
+  String id = 'ev-1',
   String actorDisplayName = 'Alice',
   String eventType = 'task_created',
   String titleSnapshot = 'Clean kitchen',
@@ -49,6 +52,7 @@ HouseholdEvent makeEvent({
   String? currency,
 }) => HouseholdEvent.fromMap(
   baseEventMap(
+    id: id,
     actorDisplayName: actorDisplayName,
     eventType: eventType,
     titleSnapshot: titleSnapshot,
@@ -1401,5 +1405,157 @@ void main() {
       expect(_testSummary.expenseCount, 5);
       expect(_testSummary.activeMemberCount, 4);
     });
+  });
+
+  // ---------------------------------------------------------------------
+  // TWO-001 regression: a remote membership change (a household_events row
+  // this client didn't cause) must bust the retained member/summary/task-
+  // assignee caches during the SAME running session — no navigation, no
+  // app restart. household_events is the realtime-enabled signal driving
+  // the invalidation; see household_detail_screen.dart's ref.listen.
+  group('HouseholdDetailScreen — remote membership change (TWO-001)', () {
+    testWidgets(
+      'a remote member_joined event refreshes the summary member count '
+      'and busts the members / task-assignee caches for the next read',
+      (tester) async {
+        final eventsController = StreamController<List<HouseholdEvent>>();
+        addTearDown(eventsController.close);
+
+        var summaryFetches = 0;
+        var membersFetches = 0;
+        var taskMembersFetches = 0;
+
+        const screen = HouseholdDetailScreen(householdId: 'test-hh');
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              householdByIdProvider('test-hh').overrideWith(
+                (ref) async => Household(
+                  id: 'test-hh',
+                  name: 'Test Home',
+                  createdBy: 'user-1',
+                  createdAt: DateTime.utc(2026, 8, 1),
+                ),
+              ),
+              householdInvitesProvider(
+                'test-hh',
+              ).overrideWith((ref) async => const []),
+              householdRecentActivityProvider(
+                'test-hh',
+              ).overrideWith((ref) async => const []),
+              householdEventsStreamProvider(
+                'test-hh',
+              ).overrideWith((ref) => eventsController.stream),
+              householdSummaryProvider('test-hh').overrideWith((ref) async {
+                summaryFetches++;
+                return HouseholdSummary(
+                  incompleteTaskCount: 1,
+                  incompleteShoppingCount: 0,
+                  expenseCount: 0,
+                  activeMemberCount: summaryFetches == 1 ? 1 : 2,
+                );
+              }),
+              householdMembersProvider('test-hh').overrideWith((ref) async {
+                membersFetches++;
+                return membersFetches == 1
+                    ? [makeMember(userId: 'user-1', displayName: 'Miguel')]
+                    : [
+                        makeMember(userId: 'user-1', displayName: 'Miguel'),
+                        makeMember(userId: 'user-2', displayName: 'QA Member'),
+                      ];
+              }),
+              taskMembersProvider('test-hh').overrideWith((ref) async {
+                taskMembersFetches++;
+                return taskMembersFetches == 1
+                    ? const [
+                        TaskMember(
+                          userId: 'user-1',
+                          displayName: 'Miguel',
+                          publicId: 'miguel#1',
+                        ),
+                      ]
+                    : const [
+                        TaskMember(
+                          userId: 'user-1',
+                          displayName: 'Miguel',
+                          publicId: 'miguel#1',
+                        ),
+                        TaskMember(
+                          userId: 'user-2',
+                          displayName: 'QA Member',
+                          publicId: 'qa#1',
+                        ),
+                      ];
+              }),
+            ],
+            // The probe stands in for the Members screen / task form that
+            // would independently watch these two household-scoped caches
+            // in the real app — proving they were busted, not just that
+            // `ref.invalidate` was called with no observer to notice.
+            child: MaterialApp(
+              home: Column(
+                children: [
+                  Expanded(child: screen),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      ref.watch(householdMembersProvider('test-hh'));
+                      ref.watch(taskMembersProvider('test-hh'));
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('1 active member'), findsOneWidget);
+        expect(summaryFetches, 1);
+        expect(membersFetches, 1);
+        expect(taskMembersFetches, 1);
+
+        // Initial events snapshot — the stream's first emission, mirroring
+        // what a real Supabase realtime stream sends on subscribe.
+        eventsController.add([
+          makeEvent(eventType: 'task_created', titleSnapshot: 'Do dishes'),
+        ]);
+        await tester.pumpAndSettle();
+
+        // First emission alone must not invalidate anything — there is no
+        // "previous" snapshot to diff against yet.
+        expect(summaryFetches, 1);
+        expect(membersFetches, 1);
+        expect(taskMembersFetches, 1);
+
+        // The remote join: a new row appears on top of the existing feed.
+        eventsController.add([
+          makeEvent(eventType: 'task_created', titleSnapshot: 'Do dishes'),
+          makeEvent(
+            id: 'ev-join',
+            eventType: 'member_joined',
+            actorDisplayName: 'QA Member',
+          ),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('2 active members'),
+          findsOneWidget,
+          reason: 'dashboard summary must refresh live, no restart needed',
+        );
+        expect(summaryFetches, 2);
+        expect(
+          membersFetches,
+          2,
+          reason: 'Members screen cache must be busted for its next read',
+        );
+        expect(
+          taskMembersFetches,
+          2,
+          reason: 'task assignment source must be busted for its next read',
+        );
+      },
+    );
   });
 }

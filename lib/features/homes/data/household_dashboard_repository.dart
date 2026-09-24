@@ -93,4 +93,16 @@ class HouseholdDashboardRepository {
         .order('occurred_at', ascending: false);
     return rows.map(HouseholdEvent.fromMap).toList();
   }
+
+  /// Streams household_events for this household. Used only to detect that
+  /// new events arrived (e.g. a remote member joined) so cached member/
+  /// summary/activity state can be invalidated — not for rendering directly.
+  Stream<List<HouseholdEvent>> watchEvents(String householdId) {
+    return _client
+        .from('household_events')
+        .stream(primaryKey: ['id'])
+        .eq('household_id', householdId)
+        .order('occurred_at')
+        .map((rows) => rows.map(HouseholdEvent.fromMap).toList());
+  }
 }

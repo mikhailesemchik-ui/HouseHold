@@ -100,6 +100,16 @@ final householdAllActivityProvider =
       ).fetchActivity(householdId);
     });
 
+/// Live household_events feed, used solely to detect remote changes (e.g. a
+/// member joining) and invalidate the retained FutureProviders above that
+/// don't otherwise learn about them during a running session. See TWO-001.
+final householdEventsStreamProvider = StreamProvider.autoDispose
+    .family<List<HouseholdEvent>, String>((ref, householdId) {
+      return HouseholdDashboardRepository(
+        supabaseClient,
+      ).watchEvents(householdId);
+    });
+
 final householdStatsProvider =
     FutureProvider.family<HouseholdStats, HouseholdStatsRequest>((
       ref,
