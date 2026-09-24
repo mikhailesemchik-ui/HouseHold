@@ -29,7 +29,7 @@ void main() async {
   final pushService = RemotePushNotificationService();
   await pushService.initialize(onNavigate: appRouter.go);
   HomeWidget.widgetClicked.listen((_) => appRouter.go('/today'));
-  runApp(const ProviderScope(child: App()));
+  runApp(ProviderScope(retry: noProviderRetry, child: const App()));
   _handleLaunchNotification();
   _handleRemoteLaunchTap(pushService);
   _handleWidgetLaunch();

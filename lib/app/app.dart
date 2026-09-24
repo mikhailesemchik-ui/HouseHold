@@ -76,3 +76,9 @@ class _TopStatusBarHaze extends StatelessWidget {
     );
   }
 }
+
+/// Riverpod 3 silently retries failed providers ~10 times while reporting
+/// "loading", which hid every screen's error/Retry state offline. Passing this
+/// as `ProviderScope.retry` surfaces errors immediately; screens already offer
+/// an explicit Retry.
+Duration? noProviderRetry(int retryCount, Object error) => null;

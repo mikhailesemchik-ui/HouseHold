@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:household_os/app/app.dart';
 import 'package:household_os/features/profile/domain/profile.dart';
 import 'package:household_os/features/profile/presentation/profile_provider.dart';
 import 'package:household_os/features/startup/presentation/startup_screen.dart';
@@ -142,6 +143,45 @@ void main() {
       // Still shows loading before navigation fires (not a login screen)
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
+    });
+  });
+
+  // RR-001: Riverpod 3 retries failed providers ~10 times with backoff while
+  // reporting "loading", so offline the startup screen sat on a spinner for
+  // minutes. With the app's retry policy the error frame (with Retry) shows
+  // as soon as the load fails.
+  group('provider retry policy (RR-001)', () {
+    Widget app({required bool retryDisabled}) => ProviderScope(
+      retry: retryDisabled ? noProviderRetry : null,
+      overrides: [
+        currentProfileProvider.overrideWith(
+          (ref) => Future<Profile>.error(const SocketException('offline')),
+        ),
+      ],
+      child: const MaterialApp(home: StartupScreen()),
+    );
+
+    testWidgets('failed startup load shows the error frame immediately', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app(retryDisabled: true));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.textContaining("Couldn't connect"), findsOneWidget);
+    });
+
+    testWidgets('default retry keeps a failed load on the spinner', (
+      tester,
+    ) async {
+      await tester.pumpWidget(app(retryDisabled: false));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Retry'), findsNothing);
+      // Drain pending retry timers so the test can end cleanly.
+      await tester.pump(const Duration(minutes: 5));
     });
   });
 }
