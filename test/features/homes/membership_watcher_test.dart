@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:household_os/features/homes/domain/household.dart';
+import 'package:household_os/features/homes/domain/household_summary.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
 import 'package:household_os/features/homes/presentation/membership_watcher.dart';
 
@@ -114,5 +115,80 @@ void main() {
     membership.add({'hh'});
     await tester.pumpAndSettle();
     expect(find.text('inside household'), findsOneWidget);
+  });
+
+  // FLOW-002: after a remote removal the household-scoped caches reload under
+  // the removed identity and hold empty results. When the same membership
+  // becomes active again in the same session those must be evicted and Homes
+  // refetched, or the rejoined user sees stale zeros / "Home not found".
+  testWidgets('remote reactivation refetches Homes and evicts stale caches', (
+    tester,
+  ) async {
+    final membership = StreamController<Set<String>>();
+    addTearDown(membership.close);
+    var server = [_home('hh')];
+    var summaryFetches = 0;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          homesProvider.overrideWith(() => _FakeHomes(() => server)),
+          activeHouseholdIdsProvider.overrideWith((ref) => membership.stream),
+          householdSummaryProvider('hh').overrideWith((ref) async {
+            summaryFetches++;
+            return HouseholdSummary(
+              incompleteTaskCount: 0,
+              incompleteShoppingCount: 0,
+              expenseCount: 0,
+              activeMemberCount: summaryFetches,
+            );
+          }),
+        ],
+        child: MaterialApp.router(
+          routerConfig: GoRouter(
+            initialLocation: '/homes',
+            routes: [
+              ShellRoute(
+                builder: (_, _, child) => MembershipWatcher(child: child),
+                routes: [
+                  GoRoute(
+                    path: '/homes',
+                    builder: (_, _) => Consumer(
+                      builder: (context, ref, _) {
+                        final homes =
+                            ref.watch(homesProvider).asData?.value ?? const [];
+                        final summary = ref
+                            .watch(householdSummaryProvider('hh'))
+                            .asData
+                            ?.value;
+                        return Text(
+                          '${homes.map((h) => h.name).join(',')}|'
+                          '${summary?.activeMemberCount}',
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    membership.add({'hh'});
+    await tester.pumpAndSettle();
+    expect(find.text('QA hh|1'), findsOneWidget);
+
+    server = [];
+    membership.add(<String>{});
+    await tester.pumpAndSettle();
+    expect(find.textContaining('QA hh'), findsNothing);
+
+    // Rejoin: server list has the household again and the summary cache must
+    // be refetched (fetch count 3 = initial, removal eviction, reactivation).
+    server = [_home('hh')];
+    membership.add({'hh'});
+    await tester.pumpAndSettle();
+    expect(find.text('QA hh|3'), findsOneWidget);
   });
 }
