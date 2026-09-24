@@ -644,6 +644,34 @@ void main() {
       },
     );
 
+    // SET-001 regression: same mechanism as the expenses test above — the
+    // real bug (filtered DELETE dropped without `REPLICA IDENTITY FULL` on
+    // expense_settlements) lives in Postgres/Realtime and can't be reproduced
+    // here. This proves the consumer side: once realtime delivers the
+    // DELETE, the screen drops the settlement row on that same emission.
+    testWidgets(
+      'deleting a settlement on the same live stream removes it from the '
+      'screen',
+      (tester) async {
+        final settlementsController = StreamController<List<Settlement>>();
+        addTearDown(settlementsController.close);
+        await tester.pumpWidget(
+          buildScreen(
+            Stream.value(const []),
+            settlementsStream: settlementsController.stream,
+          ),
+        );
+
+        settlementsController.add([makeSettlement()]);
+        await tester.pump();
+        expect(find.text('Bob paid Alice'), findsOneWidget);
+
+        settlementsController.add(const []);
+        await tester.pump();
+        expect(find.text('Bob paid Alice'), findsNothing);
+      },
+    );
+
     testWidgets('settled state and empty history show together', (
       tester,
     ) async {
