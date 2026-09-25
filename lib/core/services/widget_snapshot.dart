@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:household_os/core/services/widget_settings.dart';
@@ -19,8 +21,26 @@ class WidgetSnapshotService {
       'com.household.household_os.HouseholdOsWidgetProvider';
   static const _iosName = 'HouseholdOsWidget';
 
-  /// Debounce: skip if less than 2 s have elapsed since the last update.
-  static DateTime? _lastUpdateTime;
+  static const _minInterval = Duration(seconds: 2);
+
+  /// Non-null while inside the throttle window that follows a write.
+  static Timer? _cooldown;
+
+  /// Latest call that arrived inside the window; written once it closes.
+  static ({Map<String, List<TodayEntry>> sections, DateTime now})? _pending;
+
+  /// Replaceable so tests can observe writes without the platform channel.
+  @visibleForTesting
+  static Future<void> Function(Map<String, List<TodayEntry>>, DateTime) writer =
+      _write;
+
+  @visibleForTesting
+  static void resetForTest() {
+    _cooldown?.cancel();
+    _cooldown = null;
+    _pending = null;
+    writer = _write;
+  }
 
   /// Builds up to 3 display rows from sections using overdue → today → upcoming
   /// priority. Returns an empty list when no scheduled entries are available.
@@ -80,16 +100,32 @@ class WidgetSnapshotService {
     return '${weekdays[local.weekday - 1]} ${local.day} ${months[local.month - 1]}';
   }
 
-  /// Writes the current snapshot and triggers a widget redraw.
-  /// Silently skips if called too soon after a previous update.
+  /// Writes the snapshot immediately, or, inside the throttle window, keeps
+  /// only the latest call and writes it once when the window closes.
   static Future<void> update({
     required Map<String, List<TodayEntry>> sections,
     required DateTime now,
   }) async {
-    final last = _lastUpdateTime;
-    if (last != null && now.difference(last).inSeconds < 2) return;
-    _lastUpdateTime = now;
+    if (_cooldown != null) {
+      _pending = (sections: sections, now: now);
+      return;
+    }
+    _cooldown = Timer(_minInterval, _flushPending);
+    await writer(sections, now);
+  }
 
+  static void _flushPending() {
+    _cooldown = null;
+    final pending = _pending;
+    if (pending == null) return;
+    _pending = null;
+    update(sections: pending.sections, now: pending.now).ignore();
+  }
+
+  static Future<void> _write(
+    Map<String, List<TodayEntry>> sections,
+    DateTime now,
+  ) async {
     final mode = await WidgetSettings.getPrivacyMode();
     final overdueCount = sections['overdue']!.length;
     final todayCount = sections['today']!.length;
