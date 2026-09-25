@@ -14,3 +14,25 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Build and run
+
+Requires Flutter (stable) and an Android SDK. The app reads its Supabase
+project from compile-time defines; a build without them fails at startup:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY` (the publishable client key, not a server secret)
+
+Firebase client config is committed at `android/app/google-services.json`.
+
+```bash
+# debug run
+flutter run \
+  --dart-define=SUPABASE_URL=<project-url> \
+  --dart-define=SUPABASE_ANON_KEY=<publishable-key>
+
+# release APK (debug-signed, for demo use)
+flutter build apk --release \
+  --dart-define=SUPABASE_URL=<project-url> \
+  --dart-define=SUPABASE_ANON_KEY=<publishable-key>
+```

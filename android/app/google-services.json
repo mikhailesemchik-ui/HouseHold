@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "629464804812",
+    "project_id": "household-2b04e",
+    "storage_bucket": "household-2b04e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:629464804812:android:75f31057f5b2f28607c169",
+        "android_client_info": {
+          "package_name": "com.household.household_os"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhaGZf-IETK0F9ihxuOExn-Arm_C4sPT4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
