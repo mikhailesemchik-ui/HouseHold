@@ -191,4 +191,152 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('QA hh|3'), findsOneWidget);
   });
+
+  // MU-001: another member leaves while the app is backgrounded; nothing was
+  // watching the household events, so cached state stays at the old count
+  // until the app resumes.
+  group('app resume (MU-001)', () {
+    Widget app({
+      required List<Household> Function() server,
+      required int Function() members,
+      required void Function() onSummaryFetch,
+    }) {
+      return ProviderScope(
+        overrides: [
+          homesProvider.overrideWith(() => _FakeHomes(server)),
+          activeHouseholdIdsProvider.overrideWith(
+            (ref) => Stream.value({'hh'}),
+          ),
+          householdSummaryProvider('hh').overrideWith((ref) async {
+            onSummaryFetch();
+            return HouseholdSummary(
+              incompleteTaskCount: 0,
+              incompleteShoppingCount: 0,
+              expenseCount: 0,
+              activeMemberCount: members(),
+            );
+          }),
+        ],
+        child: MaterialApp.router(
+          routerConfig: GoRouter(
+            initialLocation: '/homes',
+            routes: [
+              ShellRoute(
+                builder: (_, _, child) => MembershipWatcher(child: child),
+                routes: [
+                  GoRoute(
+                    path: '/homes',
+                    builder: (_, _) => Consumer(
+                      builder: (context, ref, _) {
+                        ref.watch(homesProvider);
+                        final summary = ref
+                            .watch(householdSummaryProvider('hh'))
+                            .asData
+                            ?.value;
+                        return Text('members ${summary?.activeMemberCount}');
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Future<void> backgroundAndResume(WidgetTester tester) async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('resume refetches stale household state (2 to 1 members)', (
+      tester,
+    ) async {
+      var members = 2;
+      await tester.pumpWidget(
+        app(
+          server: () => [_home('hh')],
+          members: () => members,
+          onSummaryFetch: () {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('members 2'), findsOneWidget);
+
+      members = 1; // remote leave while backgrounded, no event delivered
+      await backgroundAndResume(tester);
+      expect(find.text('members 1'), findsOneWidget);
+    });
+
+    testWidgets('each resume refetches once, with no duplicate observers', (
+      tester,
+    ) async {
+      var fetches = 0;
+      await tester.pumpWidget(
+        app(
+          server: () => [_home('hh')],
+          members: () => 1,
+          onSummaryFetch: () => fetches++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(fetches, 1);
+
+      await backgroundAndResume(tester);
+      expect(fetches, 2);
+      await backgroundAndResume(tester);
+      expect(fetches, 3);
+    });
+
+    testWidgets('resume with no households is a safe no-op', (tester) async {
+      var fetches = 0;
+      await tester.pumpWidget(
+        app(
+          server: () => <Household>[],
+          members: () => 0,
+          onSummaryFetch: () => fetches++,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = fetches;
+
+      await backgroundAndResume(tester);
+      expect(tester.takeException(), isNull);
+      expect(fetches, before);
+    });
+
+    testWidgets('resume before Homes ever loaded does nothing', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            homesProvider.overrideWith(
+              () => _FakeHomes(() => throw StateError('offline')),
+            ),
+            activeHouseholdIdsProvider.overrideWith(
+              (ref) => const Stream.empty(),
+            ),
+          ],
+          child: MaterialApp.router(
+            routerConfig: GoRouter(
+              routes: [
+                ShellRoute(
+                  builder: (_, _, child) => MembershipWatcher(child: child),
+                  routes: [
+                    GoRoute(path: '/', builder: (_, _) => const Text('shell')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await backgroundAndResume(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text('shell'), findsOneWidget);
+    });
+  });
 }

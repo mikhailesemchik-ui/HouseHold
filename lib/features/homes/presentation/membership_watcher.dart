@@ -16,13 +16,49 @@ import 'package:household_os/features/tasks/presentation/tasks_provider.dart';
 /// caches, possibly filled with empty results while access was lost, are
 /// evicted too. Mounted once at the shell root, which outlives every
 /// household route. See FLOW-001 / FLOW-002.
-class MembershipWatcher extends ConsumerWidget {
+///
+/// It also owns the one app-resume refresh (MU-001): other members' changes
+/// only reach cached household state through realtime events seen while a
+/// household screen is open, so anything that happened while the app was
+/// backgrounded or on another screen is evicted when the app resumes.
+class MembershipWatcher extends ConsumerStatefulWidget {
   const MembershipWatcher({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MembershipWatcher> createState() => _MembershipWatcherState();
+}
+
+class _MembershipWatcherState extends ConsumerState<MembershipWatcher>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final homes = ref.read(homesProvider).asData?.value;
+    if (homes == null) return;
+    // Screens currently watching these refetch in place; unwatched caches are
+    // dropped and refetch on next open.
+    ref.invalidate(homesProvider);
+    for (final home in homes) {
+      _evictHouseholdCaches(ref, home.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.listen<AsyncValue<Set<String>>>(activeHouseholdIdsProvider, (
       previous,
       next,
@@ -52,7 +88,7 @@ class MembershipWatcher extends ConsumerWidget {
         );
       }
     });
-    return child;
+    return widget.child;
   }
 
   void _refresh(
@@ -66,12 +102,16 @@ class MembershipWatcher extends ConsumerWidget {
     if (homes != null && homesIsStale(homes)) {
       ref.invalidate(homesProvider);
     }
-    ref.invalidate(householdByIdProvider(id));
-    ref.invalidate(householdSummaryProvider(id));
-    ref.invalidate(householdMembersProvider(id));
-    ref.invalidate(householdInvitesProvider(id));
-    ref.invalidate(householdRecentActivityProvider(id));
-    ref.invalidate(householdAllActivityProvider(id));
-    ref.invalidate(taskMembersProvider(id));
+    _evictHouseholdCaches(ref, id);
   }
+}
+
+void _evictHouseholdCaches(WidgetRef ref, String id) {
+  ref.invalidate(householdByIdProvider(id));
+  ref.invalidate(householdSummaryProvider(id));
+  ref.invalidate(householdMembersProvider(id));
+  ref.invalidate(householdInvitesProvider(id));
+  ref.invalidate(householdRecentActivityProvider(id));
+  ref.invalidate(householdAllActivityProvider(id));
+  ref.invalidate(taskMembersProvider(id));
 }
