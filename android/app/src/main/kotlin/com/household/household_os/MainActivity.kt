@@ -39,6 +39,11 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // Widget taps arrive as data household_os://today. Flutter would use that as
+    // the initial route and GoRouter's Uri.parse throws on the underscore
+    // scheme before runApp (NW-003). Widget navigation is handled in main.dart.
+    override fun getInitialRoute(): String? = "/"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingLaunchPayload = extractNotificationPayload(intent)
