@@ -7,6 +7,7 @@ import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
+import es.antonborri.home_widget.HomeWidgetPlugin
 
 class HouseholdOsWidgetProvider : AppWidgetProvider() {
 
@@ -25,7 +26,7 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetId: Int,
     ) {
-        val sp = context.getSharedPreferences("HomeWidgetPlugin", Context.MODE_PRIVATE)
+        val sp = HomeWidgetPlugin.getData(context)
         val overdueCount = sp.getInt("widget_overdue_count", 0)
         val todayCount = sp.getInt("widget_today_count", 0)
         val privacy = sp.getString("widget_privacy", "counts_only") ?: "counts_only"
