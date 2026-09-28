@@ -20,6 +20,7 @@ class AppScreenHeader extends StatelessWidget {
     this.actions = const [],
     this.bottom,
     this.compactTitle = false,
+    this.centerTitle = false,
   });
 
   /// Typically `const Center(child: AppBackButton())`, or null for a
@@ -46,6 +47,12 @@ class AppScreenHeader extends StatelessWidget {
   /// `false` and is unaffected.
   final bool compactTitle;
 
+  /// When `true`, the title is centered on the header's full width, not in
+  /// the space left between the leading and trailing controls. The side
+  /// padding is the leading slot on both sides (the action buttons are
+  /// narrower), so a long title ellipsizes before touching either control.
+  final bool centerTitle;
+
   @override
   Widget build(BuildContext context) {
     final appBarTheme = Theme.of(context).appBarTheme;
@@ -62,42 +69,84 @@ class AppScreenHeader extends StatelessWidget {
         SizedBox(height: MediaQuery.paddingOf(context).top),
         SizedBox(
           height: AppBarMetrics.toolbarHeight,
-          child: Row(
-            children: [
-              SizedBox(
-                width: leading == null
-                    ? AppSpacing.base
-                    : AppBarMetrics.leadingWidth,
-                child: leading,
-              ),
-              SizedBox(width: leading == null ? 0 : AppBarMetrics.titleSpacing),
-              Expanded(
-                child: compactTitle
-                    ? FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          title,
-                          style: appBarTheme.titleTextStyle,
-                          maxLines: 1,
-                          softWrap: false,
+          child: centerTitle
+              ? _centeredRow(appBarTheme)
+              : Row(
+                  children: [
+                    SizedBox(
+                      width: leading == null
+                          ? AppSpacing.base
+                          : AppBarMetrics.leadingWidth,
+                      child: leading,
+                    ),
+                    SizedBox(
+                      width: leading == null ? 0 : AppBarMetrics.titleSpacing,
+                    ),
+                    Expanded(
+                      child: compactTitle
+                          ? FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                title,
+                                style: appBarTheme.titleTextStyle,
+                                maxLines: 1,
+                                softWrap: false,
+                              ),
+                            )
+                          : Text(
+                              title,
+                              style: appBarTheme.titleTextStyle,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                    ),
+                    if (actions.isNotEmpty)
+                      Padding(
+                        padding: AppBarMetrics.actionsPadding,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: actions,
                         ),
-                      )
-                    : Text(
-                        title,
-                        style: appBarTheme.titleTextStyle,
-                        overflow: TextOverflow.ellipsis,
                       ),
-              ),
-              if (actions.isNotEmpty)
-                Padding(
-                  padding: AppBarMetrics.actionsPadding,
-                  child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+                  ],
                 ),
-            ],
-          ),
         ),
         ?bottom,
+      ],
+    );
+  }
+
+  Widget _centeredRow(AppBarThemeData appBarTheme) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal:
+                  AppBarMetrics.leadingWidth + AppBarMetrics.titleSpacing,
+            ),
+            child: Center(
+              child: Text(
+                title,
+                style: appBarTheme.titleTextStyle,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ),
+        Row(
+          children: [
+            SizedBox(width: AppBarMetrics.leadingWidth, child: leading),
+            const Spacer(),
+            if (actions.isNotEmpty)
+              Padding(
+                padding: AppBarMetrics.actionsPadding,
+                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+              ),
+          ],
+        ),
       ],
     );
   }

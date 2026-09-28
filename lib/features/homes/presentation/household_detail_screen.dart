@@ -201,6 +201,7 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
     // replacement.
     final header = AppScreenHeader(
       leading: const Center(child: AppBackButton()),
+      centerTitle: true,
       title: householdAsync.when(
         data: (h) => h?.name ?? cachedHousehold?.name ?? 'Home',
         loading: () => cachedHousehold?.name ?? 'Home',
