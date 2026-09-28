@@ -24,13 +24,28 @@ class HouseholdDashboardRepository {
     );
   }
 
+  // A due-date task's completion lives on its task_occurrences row, not on
+  // tasks.completed_at (see complete_occurrence/reopen_occurrence) — that
+  // column is only ever set for a task with no due date, completed directly.
+  // Counting tasks.completed_at alone for every task therefore counts a
+  // completed due-date task as still incomplete forever. Mirror the same
+  // split the Tasks screen itself renders: anytime tasks by their own
+  // completed_at, due-date tasks by their occurrence's completed_at.
   Future<int> _countIncompleteTasks(String householdId) async {
-    final rows = await _client
-        .from('tasks')
-        .select('id')
-        .eq('household_id', householdId)
-        .isFilter('completed_at', null);
-    return rows.length;
+    final results = await Future.wait([
+      _client
+          .from('tasks')
+          .select('id')
+          .eq('household_id', householdId)
+          .isFilter('due_at', null)
+          .isFilter('completed_at', null),
+      _client
+          .from('task_occurrences')
+          .select('id')
+          .eq('household_id', householdId)
+          .isFilter('completed_at', null),
+    ]);
+    return results[0].length + results[1].length;
   }
 
   Future<int> _countIncompleteShopping(String householdId) async {

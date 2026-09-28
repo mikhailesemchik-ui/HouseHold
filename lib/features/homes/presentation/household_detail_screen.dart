@@ -156,9 +156,9 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
         false;
 
     // TWO-001: household_events is the one realtime-enabled signal that
-    // fires on every remote membership change. A new row means the member/
-    // summary/task-assignee caches below may now be stale, so bust them —
-    // the next watch (on this screen, Members, or the task form) refetches.
+    // fires on every remote change. A new row means the member/summary/
+    // task-assignee caches below may now be stale, so bust them — the next
+    // watch (on this screen, Members, or the task form) refetches.
     ref.listen<AsyncValue<List<HouseholdEvent>>>(
       householdEventsStreamProvider(widget.householdId),
       (previous, next) {
@@ -170,11 +170,15 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
         if (newEvents.isEmpty) return;
         ref.invalidate(householdRecentActivityProvider(widget.householdId));
         ref.invalidate(householdAllActivityProvider(widget.householdId));
+        // The summary's task/shopping/expense/member counts can each be
+        // changed by any event, not just a membership one — a task/
+        // shopping/expense mutation was previously left stale until the
+        // app restarted (MU-002).
+        ref.invalidate(householdSummaryProvider(widget.householdId));
         if (newEvents.any(
           (e) => _kMembershipEventTypes.contains(e.eventType),
         )) {
           ref.invalidate(householdMembersProvider(widget.householdId));
-          ref.invalidate(householdSummaryProvider(widget.householdId));
           ref.invalidate(taskMembersProvider(widget.householdId));
         }
       },

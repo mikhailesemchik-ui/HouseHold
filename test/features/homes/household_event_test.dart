@@ -1598,5 +1598,130 @@ void main() {
         );
       },
     );
+
+    // MU-002: a task/shopping/expense mutation is not a membership change,
+    // but it does change the summary's counts — it must refresh the same
+    // way, without needing a membership event or an app restart.
+    testWidgets(
+      'a non-membership event (task_completed) also refreshes the summary, '
+      'without busting the member/task-assignee caches',
+      (tester) async {
+        final eventsController = StreamController<List<HouseholdEvent>>();
+        addTearDown(eventsController.close);
+
+        var summaryFetches = 0;
+        var membersFetches = 0;
+        var taskMembersFetches = 0;
+
+        const screen = HouseholdDetailScreen(
+          householdId: 'test-hh',
+          currentUserIdOverride: 'user-1',
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              householdByIdProvider('test-hh').overrideWith(
+                (ref) async => Household(
+                  id: 'test-hh',
+                  name: 'Test Home',
+                  createdBy: 'user-1',
+                  createdAt: DateTime.utc(2026, 8, 1),
+                ),
+              ),
+              householdInvitesProvider(
+                'test-hh',
+              ).overrideWith((ref) async => const []),
+              householdRecentActivityProvider(
+                'test-hh',
+              ).overrideWith((ref) async => const []),
+              householdEventsStreamProvider(
+                'test-hh',
+              ).overrideWith((ref) => eventsController.stream),
+              householdSummaryProvider('test-hh').overrideWith((ref) async {
+                summaryFetches++;
+                return HouseholdSummary(
+                  incompleteTaskCount: summaryFetches == 1 ? 4 : 3,
+                  incompleteShoppingCount: 0,
+                  expenseCount: 0,
+                  activeMemberCount: 1,
+                );
+              }),
+              householdMembersProvider('test-hh').overrideWith((ref) async {
+                membersFetches++;
+                return [makeMember(userId: 'user-1', displayName: 'Miguel')];
+              }),
+              taskMembersProvider('test-hh').overrideWith((ref) async {
+                taskMembersFetches++;
+                return const [
+                  TaskMember(
+                    userId: 'user-1',
+                    displayName: 'Miguel',
+                    publicId: 'miguel#1',
+                  ),
+                ];
+              }),
+            ],
+            // Stands in for the Members screen / task form, which would
+            // independently watch these caches in the real app.
+            child: MaterialApp(
+              home: Column(
+                children: [
+                  Expanded(child: screen),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      ref.watch(householdMembersProvider('test-hh'));
+                      ref.watch(taskMembersProvider('test-hh'));
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('4'), findsOneWidget);
+        expect(find.text('incomplete tasks'), findsOneWidget);
+        expect(summaryFetches, 1);
+        expect(membersFetches, 1);
+        expect(taskMembersFetches, 1);
+
+        // Initial snapshot — no "previous" to diff against yet.
+        eventsController.add([
+          makeEvent(eventType: 'task_created', titleSnapshot: 'Water plants'),
+        ]);
+        await tester.pumpAndSettle();
+        expect(summaryFetches, 1);
+
+        // A new row, but not a membership one: completing a task.
+        eventsController.add([
+          makeEvent(eventType: 'task_created', titleSnapshot: 'Water plants'),
+          makeEvent(
+            id: 'ev-complete',
+            eventType: 'task_completed',
+            titleSnapshot: 'Water plants',
+          ),
+        ]);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('3'),
+          findsOneWidget,
+          reason: 'dashboard summary must refresh on a task event too',
+        );
+        expect(summaryFetches, 2);
+        expect(
+          membersFetches,
+          1,
+          reason: 'a task event is not a membership change',
+        );
+        expect(
+          taskMembersFetches,
+          1,
+          reason: 'a task event is not a membership change',
+        );
+      },
+    );
   });
 }
