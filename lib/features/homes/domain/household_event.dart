@@ -39,6 +39,7 @@ class HouseholdEvent {
       'task_deleted' => '$actor deleted "$title"',
       'shopping_item_added' => '$actor added "$title"',
       'shopping_item_completed' => '$actor completed "$title"',
+      'shopping_item_reopened' => '$actor reopened "$title"',
       'expense_created' =>
         amountCents != null
             ? '$actor added expense "$title" - ${_formatAmount()}'

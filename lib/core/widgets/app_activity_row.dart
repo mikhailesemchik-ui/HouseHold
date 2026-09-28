@@ -31,6 +31,7 @@ class AppActivityRow extends StatelessWidget {
       'task_deleted' => Icons.delete_outline_rounded,
       'shopping_item_added' => Icons.add_shopping_cart_rounded,
       'shopping_item_completed' => Icons.shopping_cart_checkout_rounded,
+      'shopping_item_reopened' => Icons.replay_rounded,
       'expense_created' => Icons.receipt_long_rounded,
       'expense_deleted' => Icons.receipt_long_rounded,
       'member_joined' => Icons.person_add_rounded,

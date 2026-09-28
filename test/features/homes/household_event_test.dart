@@ -291,6 +291,15 @@ void main() {
       expect(event.displayText, 'Alice completed "Milk"');
     });
 
+    // MU-003
+    test('shopping_item_reopened', () {
+      final event = makeEvent(
+        eventType: 'shopping_item_reopened',
+        titleSnapshot: 'Milk',
+      );
+      expect(event.displayText, 'Alice reopened "Milk"');
+    });
+
     test('expense_created with amount', () {
       final event = makeEvent(
         eventType: 'expense_created',
@@ -1723,5 +1732,92 @@ void main() {
         );
       },
     );
+
+    // MU-003: a shopping item reopen now emits its own event (see the
+    // 20260928000001 migration) and must refresh the summary the same way.
+    testWidgets('a shopping_item_reopened event refreshes the summary', (
+      tester,
+    ) async {
+      final eventsController = StreamController<List<HouseholdEvent>>();
+      addTearDown(eventsController.close);
+
+      var summaryFetches = 0;
+
+      const screen = HouseholdDetailScreen(
+        householdId: 'test-hh',
+        currentUserIdOverride: 'user-1',
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            householdByIdProvider('test-hh').overrideWith(
+              (ref) async => Household(
+                id: 'test-hh',
+                name: 'Test Home',
+                createdBy: 'user-1',
+                createdAt: DateTime.utc(2026, 8, 1),
+              ),
+            ),
+            householdInvitesProvider(
+              'test-hh',
+            ).overrideWith((ref) async => const []),
+            householdRecentActivityProvider(
+              'test-hh',
+            ).overrideWith((ref) async => const []),
+            householdEventsStreamProvider(
+              'test-hh',
+            ).overrideWith((ref) => eventsController.stream),
+            householdSummaryProvider('test-hh').overrideWith((ref) async {
+              summaryFetches++;
+              return HouseholdSummary(
+                incompleteTaskCount: 0,
+                incompleteShoppingCount: summaryFetches == 1 ? 2 : 3,
+                expenseCount: 0,
+                activeMemberCount: 1,
+              );
+            }),
+            householdMembersProvider(
+              'test-hh',
+            ).overrideWith((ref) async => [makeMember(userId: 'user-1')]),
+            taskMembersProvider(
+              'test-hh',
+            ).overrideWith((ref) async => const []),
+          ],
+          child: const MaterialApp(home: screen),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('2'), findsOneWidget);
+      expect(summaryFetches, 1);
+
+      eventsController.add([
+        makeEvent(
+          eventType: 'shopping_item_completed',
+          titleSnapshot: 'Avocados',
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(summaryFetches, 1); // initial snapshot, no diff yet
+
+      eventsController.add([
+        makeEvent(
+          eventType: 'shopping_item_completed',
+          titleSnapshot: 'Avocados',
+        ),
+        makeEvent(
+          id: 'ev-reopen',
+          eventType: 'shopping_item_reopened',
+          titleSnapshot: 'Avocados',
+        ),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('3'),
+        findsOneWidget,
+        reason: 'reopening a shopping item must refresh the summary too',
+      );
+      expect(summaryFetches, 2);
+    });
   });
 }
