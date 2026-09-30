@@ -4,7 +4,9 @@ A collaborative household-management app for couples, families, and roommates �
 
 Open it, see what needs attention, do one small thing, leave. Not a project-management tool wearing a home-life skin.
 
-**Download:** Android APK release coming in the final packaging step.
+**[Download for Android (.apk)](https://github.com/mikhailesemchik-ui/HouseHold/releases/download/v1.0.0/Household-OS-v1.0.0-arm64.apk)** — Android ARM64 · v1.0.0
+
+Android may ask you to allow installation from your browser or file manager, because the app is distributed directly rather than through Google Play.
 
 <p align="center">
   <img src="docs/screenshots/portfolio/today.png" width="46%" />
