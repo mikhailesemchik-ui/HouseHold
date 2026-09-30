@@ -51,3 +51,6 @@ app.*.map.json
 
 # Household device wrapper — generated screenshots/dumps, never commit
 /tools/device/output/
+
+# Working screenshot captures — only docs/screenshots/portfolio/ is tracked
+/docs/screenshots/raw/
