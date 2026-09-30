@@ -4,6 +4,8 @@ A collaborative household-management app for couples, families, and roommates �
 
 Open it, see what needs attention, do one small thing, leave. Not a project-management tool wearing a home-life skin.
 
+**Download:** Android APK release coming in the final packaging step.
+
 <p align="center">
   <img src="docs/screenshots/portfolio/today.png" width="46%" />
   <img src="docs/screenshots/portfolio/expenses.png" width="46%" />
@@ -47,11 +49,37 @@ family home) and switch between them from the Homes screen.
 
 ## Architecture
 
-```
-Flutter UI  →  Riverpod (providers, AsyncNotifier)  →  repositories
-                                                            │
-                                                            ▼
-                                     Supabase (PostgreSQL + RLS + Realtime)
+```mermaid
+graph TD
+    UI["Flutter UI (features/)"] --> RP["Riverpod providers & controllers"]
+    RP --> REPO["Repositories / services"]
+    REPO --> PG
+
+    subgraph SB[Supabase]
+        PG["PostgreSQL"]
+        RLS["Row-level security"]
+        RPC["SQL functions (RPCs)"]
+        TRG["Triggers"]
+        RT["Realtime"]
+        EVT["household_events"]
+        PG --- RLS
+        PG --- RPC
+        PG --- TRG
+        TRG --> EVT
+        EVT --> RT
+    end
+
+    RT -->|subscription| RP
+
+    subgraph AND["Android integration"]
+        NOTIF["Local notifications"]
+        WIDGET["Home-screen widget"]
+        FCM["Firebase client config"]
+    end
+
+    REPO --> NOTIF
+    REPO --> WIDGET
+    UI --> FCM
 ```
 
 - **State**: Riverpod 3 throughout — `StreamProvider`s over Supabase Realtime
@@ -60,13 +88,14 @@ Flutter UI  →  Riverpod (providers, AsyncNotifier)  →  repositories
 - **Navigation**: `go_router` with a shell route (bottom nav) and
   full-screen modal routes for forms.
 - **Backend**: Supabase — PostgreSQL with row-level security scoping every
-  table to a user's active households, SQL functions for multi-step writes
-  (join a household, complete an occurrence, transfer ownership), and
+  table to a user's active households, SQL functions (RPCs) for multi-step
+  writes (join a household, complete an occurrence, transfer ownership),
+  triggers that record a `household_events` row on meaningful changes, and
   Realtime for live sync.
 - **Platform services**: `flutter_local_notifications` for due-task
   reminders (with reboot-safe rescheduling), `home_widget` backing a native
-  Android `AppWidgetProvider`, and Firebase Cloud Messaging wiring for
-  future push notifications.
+  Android `AppWidgetProvider`, and Firebase Cloud Messaging client
+  configuration for future push notifications.
 
 ## Realtime collaboration
 
@@ -99,6 +128,35 @@ between (equal split). The app aggregates every expense and settlement in a
 household into a single net balance per pair of members, shown as "you owe"
 or "owed to you." Recording a settlement clears the debt; deleting one
 restores it — both update live for every member.
+
+## Identity, security & privacy
+
+- **Anonymous-first authentication** via Supabase — no mandatory email or
+  password to start using the app.
+- An optional display name and avatar can be set from Profile; nothing else
+  is required.
+- Members are referred to by short, human-readable codes in the UI rather
+  than exposing raw database UUIDs.
+- Every table is scoped by Supabase row-level security to the households a
+  user actually belongs to.
+- Client configuration is minimal: a project URL and a publishable anon key,
+  passed in at build time.
+
+This is standard backend-enforced access control, not end-to-end encryption
+or a local-first/zero-knowledge design, and there's no account-recovery flow
+yet.
+
+## Android integration
+
+- Release-mode Android builds, verified on physical hardware.
+- Scheduled local reminders for due tasks, with reboot-safe rescheduling.
+- Notification handling on Android 13+ (`POST_NOTIFICATIONS`).
+- A home-screen widget backed by a native `AppWidgetProvider`, kept in sync
+  with app state.
+- Lifecycle-aware refresh on app resume.
+
+iOS is not covered by this list — the codebase builds for iOS, but these
+integrations haven't gone through the same device validation there.
 
 ## Reliability
 
@@ -165,7 +223,8 @@ private credential.
 
 ## Project status
 
-This is a portfolio project. Android is the current, physically validated
-target — release-mode Android builds have been tested end to end. The
-codebase builds for iOS too, but iOS has not yet gone through the same
-device validation.
+This is a portfolio project, not a universally production-ready product.
+Android is the currently validated target — release-mode Android builds
+have been tested end to end on physical hardware. Packaging a downloadable
+GitHub Release APK is the next and final step. iOS validation is deferred to
+a later, separate phase.
