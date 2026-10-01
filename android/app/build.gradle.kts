@@ -73,4 +73,8 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // Same version home_widget already resolves transitively; declared
+    // directly here only because the app module needs to reference the
+    // WorkManager API itself, not just use it at runtime.
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:household_os/core/services/widget_snapshot.dart';
 import 'package:household_os/features/tasks/domain/recurrence_type.dart';
@@ -8,6 +10,7 @@ TodayEntry makeEntry({
   required String title,
   required String householdName,
   DateTime? scheduledAt,
+  DateTime? completedAt,
   TodayEntrySource sourceType = TodayEntrySource.occurrence,
 }) {
   return TodayEntry(
@@ -21,6 +24,7 @@ TodayEntry makeEntry({
     scheduledAt: scheduledAt,
     recurrenceType: RecurrenceType.none,
     sourceType: sourceType,
+    completedAt: completedAt,
   );
 }
 
@@ -41,22 +45,21 @@ Map<String, List<TodayEntry>> sections({
 void main() {
   final now = DateTime(2026, 8, 27, 12, 0); // local noon
 
-  // ---------------------------------------------------------------------------
-  group('WidgetSnapshotService.buildRows', () {
-    test('returns empty list when all sections are empty', () {
-      final rows = WidgetSnapshotService.buildRows(
+  group('WidgetSnapshotService.buildItems', () {
+    test('returns empty list when nothing is assigned', () {
+      final items = WidgetSnapshotService.buildItems(
         sections: sections(),
-        now: now,
+        completedToday: const [],
       );
-      expect(rows, isEmpty);
+      expect(items, isEmpty);
     });
 
-    test('prioritises overdue over today over upcoming', () {
-      final todayMidnight = DateTime(2026, 8, 27, 9, 0);
+    test('orders overdue, then today, then anytime, then upcoming', () {
       final overdueTime = DateTime(2026, 8, 26, 18, 0);
+      final todayTime = DateTime(2026, 8, 27, 9, 0);
       final upcomingTime = DateTime(2026, 8, 28, 10, 0);
 
-      final rows = WidgetSnapshotService.buildRows(
+      final items = WidgetSnapshotService.buildItems(
         sections: sections(
           overdue: [
             makeEntry(
@@ -71,7 +74,15 @@ void main() {
               taskId: 't',
               title: 'Today',
               householdName: 'H',
-              scheduledAt: todayMidnight,
+              scheduledAt: todayTime,
+            ),
+          ],
+          anytime: [
+            makeEntry(
+              taskId: 'a',
+              title: 'Anytime',
+              householdName: 'H',
+              sourceType: TodayEntrySource.anytime,
             ),
           ],
           upcoming: [
@@ -83,16 +94,21 @@ void main() {
             ),
           ],
         ),
-        now: now,
+        completedToday: const [],
       );
 
-      expect(rows.length, 3);
-      expect(rows[0].title, 'Overdue');
-      expect(rows[1].title, 'Today');
-      expect(rows[2].title, 'Upcoming');
+      expect(items.map((e) => e.title).toList(), [
+        'Overdue',
+        'Today',
+        'Anytime',
+        'Upcoming',
+      ]);
+      expect(items[0].label, 'Overdue');
+      expect(items[1].label, 'Today');
+      expect(items[2].label, 'Anytime');
     });
 
-    test('caps rows at 3 regardless of section size', () {
+    test('does not cap the list at 3 rows', () {
       final t = DateTime(2026, 8, 27, 9, 0);
       final entries = List.generate(
         6,
@@ -103,90 +119,101 @@ void main() {
           scheduledAt: t,
         ),
       );
-      final rows = WidgetSnapshotService.buildRows(
+      final items = WidgetSnapshotService.buildItems(
         sections: sections(today: entries),
-        now: now,
+        completedToday: const [],
       );
-      expect(rows.length, 3);
+      expect(items.length, 6);
     });
 
-    test('does not include anytime entries', () {
-      final rows = WidgetSnapshotService.buildRows(
+    test('completed-today entries sort after all active entries', () {
+      final activeTime = DateTime(2026, 8, 27, 9, 0);
+      final items = WidgetSnapshotService.buildItems(
+        sections: sections(
+          today: [
+            makeEntry(
+              taskId: 't',
+              title: 'Active',
+              householdName: 'H',
+              scheduledAt: activeTime,
+            ),
+          ],
+        ),
+        completedToday: [
+          makeEntry(
+            taskId: 'c',
+            title: 'Completed',
+            householdName: 'H',
+            scheduledAt: activeTime,
+            completedAt: DateTime(2026, 8, 27, 8, 0),
+          ),
+        ],
+      );
+      expect(items.map((e) => e.title).toList(), ['Active', 'Completed']);
+      expect(items.last.completed, isTrue);
+      expect(items.last.label, 'Done');
+    });
+
+    test('most recently completed-today task sorts first among completed', () {
+      final items = WidgetSnapshotService.buildItems(
+        sections: sections(),
+        completedToday: [
+          makeEntry(
+            taskId: 'early',
+            title: 'Early',
+            householdName: 'H',
+            completedAt: DateTime(2026, 8, 27, 8, 0),
+          ),
+          makeEntry(
+            taskId: 'late',
+            title: 'Late',
+            householdName: 'H',
+            completedAt: DateTime(2026, 8, 27, 11, 0),
+          ),
+        ],
+      );
+      expect(items.map((e) => e.title).toList(), ['Late', 'Early']);
+    });
+
+    test('item id uses occurrenceId for scheduled entries', () {
+      final items = WidgetSnapshotService.buildItems(
+        sections: sections(
+          today: [
+            makeEntry(
+              taskId: 't1',
+              title: 'T',
+              householdName: 'H',
+              scheduledAt: now,
+            ),
+          ],
+        ),
+        completedToday: const [],
+      );
+      expect(items.single.id, 'occ-t1');
+      expect(items.single.source, 'occurrence');
+    });
+
+    test('item id uses taskId for anytime entries', () {
+      final items = WidgetSnapshotService.buildItems(
         sections: sections(
           anytime: [
             makeEntry(
-              taskId: 'a',
-              title: 'Anytime task',
+              taskId: 't2',
+              title: 'T',
               householdName: 'H',
               sourceType: TodayEntrySource.anytime,
             ),
           ],
         ),
-        now: now,
+        completedToday: const [],
       );
-      expect(rows, isEmpty);
+      expect(items.single.id, 't2');
+      expect(items.single.source, 'anytime');
     });
 
-    test('formats time correctly for a today entry', () {
-      final scheduledAt = DateTime(2026, 8, 27, 18, 30).toUtc();
-      final rows = WidgetSnapshotService.buildRows(
-        sections: sections(
-          today: [
-            makeEntry(
-              taskId: 't',
-              title: 'Dinner',
-              householdName: 'Home',
-              scheduledAt: scheduledAt,
-            ),
-          ],
-        ),
-        now: now,
-      );
-      expect(rows.first.detail, contains('Home'));
-      // Time portion should contain 18:30 (assuming test runs in UTC environment)
-      // or another valid time — we just check it has hours:minutes format
-      expect(rows.first.detail, matches(r'Home · \d{2}:\d{2}'));
-    });
-
-    test('formats Tomorrow for an upcoming entry the next day', () {
-      final scheduledAt = DateTime(2026, 8, 28, 10, 0).toUtc();
-      final rows = WidgetSnapshotService.buildRows(
-        sections: sections(
-          upcoming: [
-            makeEntry(
-              taskId: 'u',
-              title: 'Buy milk',
-              householdName: 'Parents',
-              scheduledAt: scheduledAt,
-            ),
-          ],
-        ),
-        now: now,
-      );
-      expect(rows.first.detail, 'Parents · Tomorrow');
-    });
-
-    test('formats Yesterday for an overdue entry one day ago', () {
-      final scheduledAt = DateTime(2026, 8, 26, 10, 0).toUtc();
-      final rows = WidgetSnapshotService.buildRows(
-        sections: sections(
-          overdue: [
-            makeEntry(
-              taskId: 'o',
-              title: 'Trash',
-              householdName: 'Home',
-              scheduledAt: scheduledAt,
-            ),
-          ],
-        ),
-        now: now,
-      );
-      expect(rows.first.detail, 'Home · Yesterday');
-    });
-
-    test('formats weekday + date for entries more than 2 days away', () {
+    test('formats weekday + date for an upcoming entry', () {
       final scheduledAt = DateTime(2026, 9, 5, 10, 0).toUtc();
-      final rows = WidgetSnapshotService.buildRows(
+      final items = WidgetSnapshotService.buildItems(
         sections: sections(
           upcoming: [
             makeEntry(
@@ -197,71 +224,31 @@ void main() {
             ),
           ],
         ),
-        now: now,
+        completedToday: const [],
       );
-      // Expect pattern like "Sat 5 Sep"
-      expect(rows.first.detail, matches(r'H · \w{3} \d+ \w{3}'));
+      expect(items.first.label, matches(r'\w{3} \d+ \w{3}'));
     });
 
-    test('row detail includes household name', () {
-      final t = DateTime(2026, 8, 27, 9, 0).toUtc();
-      final rows = WidgetSnapshotService.buildRows(
+    test('long titles with quotes/unicode survive a JSON round trip', () {
+      final items = WidgetSnapshotService.buildItems(
         sections: sections(
           today: [
             makeEntry(
               taskId: 't',
-              title: 'T',
-              householdName: 'Parents',
-              scheduledAt: t,
+              title: List.filled(
+                3,
+                'Deep clean the "upstairs" bathroom — grout, fan & tiles ★',
+              ).join(' '),
+              householdName: 'H',
+              scheduledAt: now,
             ),
           ],
         ),
-        now: now,
+        completedToday: const [],
       );
-      expect(rows.first.detail, startsWith('Parents · '));
-    });
-
-    test('fills from multiple sections up to 3 total', () {
-      final t = DateTime(2026, 8, 27, 9, 0).toUtc();
-      final rows = WidgetSnapshotService.buildRows(
-        sections: sections(
-          overdue: [
-            makeEntry(
-              taskId: 'o',
-              title: 'O',
-              householdName: 'H',
-              scheduledAt: t,
-            ),
-          ],
-          today: [
-            makeEntry(
-              taskId: 't',
-              title: 'T',
-              householdName: 'H',
-              scheduledAt: t,
-            ),
-          ],
-          upcoming: [
-            makeEntry(
-              taskId: 'u1',
-              title: 'U1',
-              householdName: 'H',
-              scheduledAt: t.add(const Duration(days: 2)),
-            ),
-            makeEntry(
-              taskId: 'u2',
-              title: 'U2',
-              householdName: 'H',
-              scheduledAt: t.add(const Duration(days: 3)),
-            ),
-          ],
-        ),
-        now: now,
-      );
-      expect(rows.length, 3);
-      expect(rows[0].title, 'O');
-      expect(rows[1].title, 'T');
-      expect(rows[2].title, 'U1');
+      final encoded = jsonEncode(items.map((e) => e.toJson()).toList());
+      final decoded = jsonDecode(encoded) as List<dynamic>;
+      expect(decoded.single['title'], items.single.title);
     });
   });
 }

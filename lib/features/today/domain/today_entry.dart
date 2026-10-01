@@ -14,6 +14,7 @@ class TodayEntry {
     required this.scheduledAt,
     required this.recurrenceType,
     required this.sourceType,
+    this.completedAt,
   });
 
   final String? occurrenceId;
@@ -24,6 +25,10 @@ class TodayEntry {
   final DateTime? scheduledAt;
   final RecurrenceType recurrenceType;
   final TodayEntrySource sourceType;
+
+  /// Set only for entries built from a completed-today lookup; null for the
+  /// active entries Today normally works with.
+  final DateTime? completedAt;
 
   /// True when the entry's scheduled time is before the current local day start.
   bool get isOverdue {

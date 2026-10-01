@@ -1,25 +1,54 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:household_os/core/services/widget_settings.dart';
 import 'package:household_os/features/today/domain/today_entry.dart';
 
+/// One row in the widget's personal task list.
 @immutable
-class WidgetRow {
-  const WidgetRow({required this.title, required this.detail});
+class WidgetTaskItem {
+  const WidgetTaskItem({
+    required this.id,
+    required this.source,
+    required this.title,
+    required this.household,
+    required this.label,
+    required this.completed,
+  });
 
+  /// Occurrence id for scheduled tasks, task id for anytime tasks — the
+  /// identifier the widget mutates when the row is tapped.
+  final String id;
+
+  /// `occurrence` or `anytime`; selects which TaskRepository method applies.
+  final String source;
   final String title;
-  final String detail;
+  final String household;
+
+  /// Short scannable status: Overdue, Today, Anytime, a short date, or Done.
+  final String label;
+  final bool completed;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'source': source,
+    'title': title,
+    'household': household,
+    'label': label,
+    'completed': completed,
+  };
 }
 
-/// Converts grouped Today sections into a small sanitized snapshot and writes
-/// it to the home-screen widget via the home_widget shared data channel.
+/// Converts Today data into a personal widget snapshot and writes it to the
+/// home-screen widget via the home_widget shared data channel.
 class WidgetSnapshotService {
   static const _androidName = 'HouseholdOsWidgetProvider';
   static const _androidQualified =
       'com.household.household_os.HouseholdOsWidgetProvider';
   static const _iosName = 'HouseholdOsWidget';
+  static const _snapshotKey = 'widget_snapshot_json';
 
   static const _minInterval = Duration(seconds: 2);
 
@@ -27,12 +56,21 @@ class WidgetSnapshotService {
   static Timer? _cooldown;
 
   /// Latest call that arrived inside the window; written once it closes.
-  static ({Map<String, List<TodayEntry>> sections, DateTime now})? _pending;
+  static ({
+    Map<String, List<TodayEntry>> sections,
+    List<TodayEntry> completedToday,
+    DateTime now,
+  })?
+  _pending;
 
   /// Replaceable so tests can observe writes without the platform channel.
   @visibleForTesting
-  static Future<void> Function(Map<String, List<TodayEntry>>, DateTime) writer =
-      _write;
+  static Future<void> Function(
+    Map<String, List<TodayEntry>>,
+    List<TodayEntry>,
+    DateTime,
+  )
+  writer = _write;
 
   @visibleForTesting
   static void resetForTest() {
@@ -42,46 +80,50 @@ class WidgetSnapshotService {
     writer = _write;
   }
 
-  /// Builds up to 3 display rows from sections using overdue → today → upcoming
-  /// priority. Returns an empty list when no scheduled entries are available.
-  static List<WidgetRow> buildRows({
+  /// Orders active entries (overdue → today → anytime → upcoming) followed
+  /// by entries completed today, and converts each to a display row. Bucket
+  /// labels trust which section an entry is already in — the caller (Today's
+  /// own grouping) is the single source of truth for overdue/today/upcoming.
+  static List<WidgetTaskItem> buildItems({
     required Map<String, List<TodayEntry>> sections,
-    required DateTime now,
+    required List<TodayEntry> completedToday,
   }) {
-    final rows = <WidgetRow>[];
-    final candidates = [
-      ...?sections['overdue'],
-      ...?sections['today'],
-      ...?sections['upcoming'],
+    final items = <WidgetTaskItem>[
+      ...?sections['overdue']?.map((e) => _toItem(e, label: 'Overdue')),
+      ...?sections['today']?.map((e) => _toItem(e, label: 'Today')),
+      ...?sections['anytime']?.map((e) => _toItem(e, label: 'Anytime')),
+      ...?sections['upcoming']?.map(
+        (e) => _toItem(e, label: _shortDate(e.scheduledAt!)),
+      ),
     ];
-    for (final entry in candidates) {
-      if (rows.length >= 3) break;
-      final scheduled = entry.scheduledAt;
-      if (scheduled == null) continue;
-      final timeLabel = _formatDate(scheduled, now);
-      rows.add(
-        WidgetRow(
-          title: entry.title,
-          detail: '${entry.householdName} · $timeLabel',
-        ),
-      );
-    }
-    return rows;
+
+    final sortedCompleted = [...completedToday]
+      ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
+    items.addAll(
+      sortedCompleted.map((e) => _toItem(e, label: 'Done', completed: true)),
+    );
+    return items;
   }
 
-  static String _formatDate(DateTime utc, DateTime now) {
+  static WidgetTaskItem _toItem(
+    TodayEntry entry, {
+    required String label,
+    bool completed = false,
+  }) {
+    return WidgetTaskItem(
+      id: entry.occurrenceId ?? entry.taskId,
+      source: entry.sourceType == TodayEntrySource.occurrence
+          ? 'occurrence'
+          : 'anytime',
+      title: entry.title,
+      household: entry.householdName,
+      label: label,
+      completed: completed,
+    );
+  }
+
+  static String _shortDate(DateTime utc) {
     final local = utc.toLocal();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final tomorrow = today.add(const Duration(days: 1));
-    final localDay = DateTime(local.year, local.month, local.day);
-    if (localDay == today) {
-      final h = local.hour.toString().padLeft(2, '0');
-      final m = local.minute.toString().padLeft(2, '0');
-      return '$h:$m';
-    }
-    if (localDay == yesterday) return 'Yesterday';
-    if (localDay == tomorrow) return 'Tomorrow';
     const months = [
       'Jan',
       'Feb',
@@ -104,14 +146,15 @@ class WidgetSnapshotService {
   /// only the latest call and writes it once when the window closes.
   static Future<void> update({
     required Map<String, List<TodayEntry>> sections,
+    required List<TodayEntry> completedToday,
     required DateTime now,
   }) async {
     if (_cooldown != null) {
-      _pending = (sections: sections, now: now);
+      _pending = (sections: sections, completedToday: completedToday, now: now);
       return;
     }
     _cooldown = Timer(_minInterval, _flushPending);
-    await writer(sections, now);
+    await writer(sections, completedToday, now);
   }
 
   static void _flushPending() {
@@ -119,47 +162,37 @@ class WidgetSnapshotService {
     final pending = _pending;
     if (pending == null) return;
     _pending = null;
-    update(sections: pending.sections, now: pending.now).ignore();
+    update(
+      sections: pending.sections,
+      completedToday: pending.completedToday,
+      now: pending.now,
+    ).ignore();
   }
 
   static Future<void> _write(
     Map<String, List<TodayEntry>> sections,
+    List<TodayEntry> completedToday,
     DateTime now,
   ) async {
     final mode = await WidgetSettings.getPrivacyMode();
     final overdueCount = sections['overdue']!.length;
     final todayCount = sections['today']!.length;
+    final showNames = mode == WidgetPrivacyMode.showNames;
 
-    await HomeWidget.saveWidgetData<int>('widget_overdue_count', overdueCount);
-    await HomeWidget.saveWidgetData<int>('widget_today_count', todayCount);
-    await HomeWidget.saveWidgetData<String>(
-      'widget_privacy',
-      mode == WidgetPrivacyMode.showNames ? 'show_names' : 'counts_only',
-    );
-    await HomeWidget.saveWidgetData<String>(
-      'widget_updated_at',
-      now.toUtc().toIso8601String(),
-    );
+    final payload = {
+      'overdueCount': overdueCount,
+      'todayCount': todayCount,
+      'privacy': showNames ? 'show_names' : 'counts_only',
+      'updatedAt': now.toUtc().toIso8601String(),
+      'tasks': showNames
+          ? buildItems(
+              sections: sections,
+              completedToday: completedToday,
+            ).map((e) => e.toJson()).toList()
+          : const [],
+    };
 
-    if (mode == WidgetPrivacyMode.showNames) {
-      final rows = buildRows(sections: sections, now: now);
-      for (var i = 0; i < 3; i++) {
-        final row = i < rows.length ? rows[i] : null;
-        await HomeWidget.saveWidgetData<String>(
-          'widget_row_${i}_title',
-          row?.title ?? '',
-        );
-        await HomeWidget.saveWidgetData<String>(
-          'widget_row_${i}_detail',
-          row?.detail ?? '',
-        );
-      }
-    } else {
-      for (var i = 0; i < 3; i++) {
-        await HomeWidget.saveWidgetData<String>('widget_row_${i}_title', '');
-        await HomeWidget.saveWidgetData<String>('widget_row_${i}_detail', '');
-      }
-    }
+    await HomeWidget.saveWidgetData<String>(_snapshotKey, jsonEncode(payload));
 
     await HomeWidget.updateWidget(
       name: _androidName,

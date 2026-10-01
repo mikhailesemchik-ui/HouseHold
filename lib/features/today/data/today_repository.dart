@@ -29,6 +29,21 @@ class TodayRepository {
         .eq('assigned_to', userId);
   }
 
+  /// One-shot equivalent of [watchAssignedOccurrenceRows], for callers that
+  /// cannot hold a realtime subscription open (e.g. a background isolate).
+  Future<List<Map<String, dynamic>>> fetchAssignedOccurrenceRows() async {
+    final userId = _userId;
+    if (userId == null) return const [];
+    return _client.from('task_occurrences').select().eq('assigned_to', userId);
+  }
+
+  /// One-shot equivalent of [watchAssignedTaskRows].
+  Future<List<Map<String, dynamic>>> fetchAssignedTaskRows() async {
+    final userId = _userId;
+    if (userId == null) return const [];
+    return _client.from('tasks').select().eq('assigned_to', userId);
+  }
+
   /// Extends the rolling occurrence horizon for the caller's recurring tasks.
   /// Failure is suppressed at the call site so existing data remains visible.
   Future<void> refreshRecurringOccurrences() async {

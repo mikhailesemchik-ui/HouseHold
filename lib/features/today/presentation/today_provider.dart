@@ -58,11 +58,91 @@ Map<String, List<TodayEntry>> groupTodayEntries(
   };
 }
 
+/// True when [utc] falls on the same local calendar day as [now].
+bool _isLocalToday(DateTime utc, DateTime now) {
+  final local = utc.toLocal();
+  return local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
+}
+
+/// Builds active entries and today's completed entries from raw Supabase
+/// rows. Shared by the live Today screen and the widget's background action
+/// handler so both read the same assignment/completion rules.
+({List<TodayEntry> active, List<TodayEntry> completedToday}) buildTodayEntries({
+  required List<Map<String, dynamic>> occRows,
+  required List<Map<String, dynamic>> taskRows,
+  required Map<String, String> householdNames,
+  required DateTime now,
+}) {
+  final taskLookup = <String, Map<String, dynamic>>{
+    for (final row in taskRows) row['id'] as String: row,
+  };
+
+  final active = <TodayEntry>[];
+  final completedToday = <TodayEntry>[];
+
+  for (final row in occRows) {
+    final taskId = row['task_id'] as String;
+    final task = taskLookup[taskId];
+    if (task == null) continue;
+    final householdId = row['household_id'] as String;
+    final completedAtRaw = row['completed_at'] as String?;
+    final entry = TodayEntry(
+      occurrenceId: row['id'] as String,
+      taskId: taskId,
+      title: task['title'] as String,
+      householdId: householdId,
+      householdName: householdNames[householdId] ?? householdId,
+      scheduledAt: DateTime.parse(row['scheduled_at'] as String),
+      recurrenceType: RecurrenceType.parse(
+        (task['recurrence_type'] as String?) ?? 'none',
+      ),
+      sourceType: TodayEntrySource.occurrence,
+      completedAt: completedAtRaw == null
+          ? null
+          : DateTime.parse(completedAtRaw),
+    );
+    if (completedAtRaw == null) {
+      active.add(entry);
+    } else if (_isLocalToday(entry.completedAt!, now)) {
+      completedToday.add(entry);
+    }
+  }
+
+  for (final row in taskRows) {
+    if (row['due_at'] != null) continue;
+    final householdId = row['household_id'] as String;
+    final completedAtRaw = row['completed_at'] as String?;
+    final entry = TodayEntry(
+      occurrenceId: null,
+      taskId: row['id'] as String,
+      title: row['title'] as String,
+      householdId: householdId,
+      householdName: householdNames[householdId] ?? householdId,
+      scheduledAt: null,
+      recurrenceType: RecurrenceType.none,
+      sourceType: TodayEntrySource.anytime,
+      completedAt: completedAtRaw == null
+          ? null
+          : DateTime.parse(completedAtRaw),
+    );
+    if (completedAtRaw == null) {
+      active.add(entry);
+    } else if (_isLocalToday(entry.completedAt!, now)) {
+      completedToday.add(entry);
+    }
+  }
+
+  return (active: active, completedToday: completedToday);
+}
+
 class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
   List<Map<String, dynamic>> _occRows = [];
   List<Map<String, dynamic>> _taskRows = [];
   Map<String, String> _householdNames = {};
   List<TodayEntry> _allEntries = [];
+  List<TodayEntry> _completedToday = [];
 
   @override
   Future<Map<String, List<TodayEntry>>> build() async {
@@ -96,58 +176,22 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
   }
 
   Map<String, List<TodayEntry>> _compute() {
-    final taskLookup = <String, Map<String, dynamic>>{
-      for (final row in _taskRows) row['id'] as String: row,
-    };
+    final now = DateTime.now();
+    final built = buildTodayEntries(
+      occRows: _occRows,
+      taskRows: _taskRows,
+      householdNames: _householdNames,
+      now: now,
+    );
 
-    final entries = <TodayEntry>[];
-
-    for (final row in _occRows) {
-      if (row['completed_at'] != null) continue;
-      final taskId = row['task_id'] as String;
-      final task = taskLookup[taskId];
-      if (task == null) continue;
-      final householdId = row['household_id'] as String;
-      entries.add(
-        TodayEntry(
-          occurrenceId: row['id'] as String,
-          taskId: taskId,
-          title: task['title'] as String,
-          householdId: householdId,
-          householdName: _householdNames[householdId] ?? householdId,
-          scheduledAt: DateTime.parse(row['scheduled_at'] as String),
-          recurrenceType: RecurrenceType.parse(
-            (task['recurrence_type'] as String?) ?? 'none',
-          ),
-          sourceType: TodayEntrySource.occurrence,
-        ),
-      );
-    }
-
-    for (final row in _taskRows) {
-      if (row['due_at'] != null) continue;
-      if (row['completed_at'] != null) continue;
-      final householdId = row['household_id'] as String;
-      entries.add(
-        TodayEntry(
-          occurrenceId: null,
-          taskId: row['id'] as String,
-          title: row['title'] as String,
-          householdId: householdId,
-          householdName: _householdNames[householdId] ?? householdId,
-          scheduledAt: null,
-          recurrenceType: RecurrenceType.none,
-          sourceType: TodayEntrySource.anytime,
-        ),
-      );
-    }
-
-    final sections = groupTodayEntries(entries, DateTime.now());
-    _allEntries = entries;
+    final sections = groupTodayEntries(built.active, now);
+    _allEntries = built.active;
+    _completedToday = built.completedToday;
     reconcileReminders().ignore();
     WidgetSnapshotService.update(
       sections: sections,
-      now: DateTime.now(),
+      completedToday: _completedToday,
+      now: now,
     ).ignore();
     return sections;
   }
@@ -156,7 +200,11 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
   /// No-op if Today data is not yet available.
   Future<void> updateWidget() async {
     if (state case AsyncData(:final value)) {
-      await WidgetSnapshotService.update(sections: value, now: DateTime.now());
+      await WidgetSnapshotService.update(
+        sections: value,
+        completedToday: _completedToday,
+        now: DateTime.now(),
+      );
     }
   }
 

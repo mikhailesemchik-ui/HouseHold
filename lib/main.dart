@@ -5,6 +5,10 @@ import 'package:home_widget/home_widget.dart';
 import 'package:inspire_blur/inspire_blur.dart';
 import 'package:household_os/core/services/notification_service.dart';
 import 'package:household_os/core/services/remote_push_notification_service.dart';
+// Pulls widgetActionMain() into the compiled snapshot so the native
+// DartEntrypoint-by-name lookup can resolve it; it is never called from here.
+// ignore: unused_import
+import 'package:household_os/core/services/widget_action_entrypoint.dart';
 import 'app/app.dart';
 import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';

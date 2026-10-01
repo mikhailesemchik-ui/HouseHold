@@ -3,11 +3,19 @@ package com.household.household_os
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.app.PendingIntent
+import android.os.Build
+import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
+import org.json.JSONObject
+
+/** Compact row layout kicks in below this widget height, to fit more rows. */
+private const val COMPACT_HEIGHT_DP = 180
 
 class HouseholdOsWidgetProvider : AppWidgetProvider() {
 
@@ -21,70 +29,90 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle,
+    ) {
+        updateWidget(context, appWidgetManager, appWidgetId)
+    }
+
     private fun updateWidget(
         context: Context,
         appWidgetManager: AppWidgetManager,
         appWidgetId: Int,
     ) {
         val sp = HomeWidgetPlugin.getData(context)
-        val overdueCount = sp.getInt("widget_overdue_count", 0)
-        val todayCount = sp.getInt("widget_today_count", 0)
-        val privacy = sp.getString("widget_privacy", "counts_only") ?: "counts_only"
-        val row0Title = sp.getString("widget_row_0_title", "") ?: ""
-        val row0Detail = sp.getString("widget_row_0_detail", "") ?: ""
-        val row1Title = sp.getString("widget_row_1_title", "") ?: ""
-        val row1Detail = sp.getString("widget_row_1_detail", "") ?: ""
-        val row2Title = sp.getString("widget_row_2_title", "") ?: ""
-        val row2Detail = sp.getString("widget_row_2_detail", "") ?: ""
+        val raw = sp.getString("widget_snapshot_json", null)
+        val root = if (raw != null) JSONObject(raw) else JSONObject()
+        val overdueCount = root.optInt("overdueCount", 0)
+        val todayCount = root.optInt("todayCount", 0)
+        val showNames = root.optString("privacy", "counts_only") == "show_names"
 
         val views = RemoteViews(context.packageName, R.layout.household_os_widget)
 
-        // Summary line
-        val summary = buildSummary(overdueCount, todayCount)
-        views.setTextViewText(R.id.widget_summary, summary)
+        views.setTextViewText(R.id.widget_summary, buildSummary(overdueCount, todayCount))
 
-        // Tap the whole widget → open Today tab
         val launchIntent = HomeWidgetLaunchIntent.getActivity(
             context,
             MainActivity::class.java,
             Uri.parse("household_os://today"),
         )
-        views.setOnClickPendingIntent(R.id.widget_root, launchIntent)
+        views.setOnClickPendingIntent(R.id.widget_header_click, launchIntent)
 
-        val showNames = privacy == "show_names"
-        val hasAny = overdueCount > 0 || todayCount > 0
+        val compact = isCompact(appWidgetManager, appWidgetId)
+        val adapterIntent = Intent(context, HouseholdOsWidgetRemoteViewsService::class.java)
+        // The compact flag is encoded into the data URI, not just as an extra:
+        // Intent equality for RemoteViewsFactory caching ignores extras, so a
+        // same-URI intent would keep reusing a factory built with the old
+        // compact value and never reflect a resize.
+        adapterIntent.data = Uri.parse(
+            "household-os-widget://adapter/$appWidgetId?compact=$compact",
+        )
+        adapterIntent.putExtra(HouseholdOsWidgetRemoteViewsService.EXTRA_COMPACT, compact)
+        views.setRemoteAdapter(R.id.widget_list, adapterIntent)
+        views.setEmptyView(R.id.widget_list, R.id.widget_empty)
+
+        views.setPendingIntentTemplate(R.id.widget_list, actionPendingIntentTemplate(context))
 
         if (showNames) {
-            bindRow(views, R.id.widget_row_0, R.id.widget_row_0_title, R.id.widget_row_0_detail, row0Title, row0Detail)
-            bindRow(views, R.id.widget_row_1, R.id.widget_row_1_title, R.id.widget_row_1_detail, row1Title, row1Detail)
-            bindRow(views, R.id.widget_row_2, R.id.widget_row_2_title, R.id.widget_row_2_detail, row2Title, row2Detail)
-            val anyRow = row0Title.isNotEmpty() || row1Title.isNotEmpty() || row2Title.isNotEmpty()
-            views.setViewVisibility(R.id.widget_empty, if (anyRow) View.GONE else View.VISIBLE)
+            views.setViewVisibility(R.id.widget_list, View.VISIBLE)
+            views.setTextViewText(R.id.widget_empty, "Nothing assigned.")
         } else {
-            views.setViewVisibility(R.id.widget_row_0, View.GONE)
-            views.setViewVisibility(R.id.widget_row_1, View.GONE)
-            views.setViewVisibility(R.id.widget_row_2, View.GONE)
-            views.setViewVisibility(R.id.widget_empty, if (hasAny) View.GONE else View.VISIBLE)
+            // Privacy mode hides task details: the list stays empty (the
+            // factory itself returns zero rows), only the summary line shows.
+            views.setViewVisibility(R.id.widget_list, View.GONE)
+            views.setTextViewText(
+                R.id.widget_empty,
+                if (overdueCount > 0 || todayCount > 0) "" else "Nothing due.",
+            )
         }
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
+        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
     }
 
-    private fun bindRow(
-        views: RemoteViews,
-        rowId: Int,
-        titleId: Int,
-        detailId: Int,
-        title: String,
-        detail: String,
-    ) {
-        if (title.isNotEmpty()) {
-            views.setViewVisibility(rowId, View.VISIBLE)
-            views.setTextViewText(titleId, title)
-            views.setTextViewText(detailId, detail)
-        } else {
-            views.setViewVisibility(rowId, View.GONE)
+    /**
+     * A mutable broadcast template targeting our own
+     * [HouseholdOsWidgetActionReceiver], so each row's fill-in intent (its
+     * task id/action, set as the intent data) actually merges in at click
+     * time. A `FLAG_IMMUTABLE` PendingIntent silently drops a RemoteViews
+     * collection's per-row fill-in data — this must stay mutable.
+     */
+    private fun actionPendingIntentTemplate(context: Context): PendingIntent {
+        val intent = Intent(context, HouseholdOsWidgetActionReceiver::class.java)
+        var flags = PendingIntent.FLAG_UPDATE_CURRENT
+        if (Build.VERSION.SDK_INT >= 31) {
+            flags = flags or PendingIntent.FLAG_MUTABLE
         }
+        return PendingIntent.getBroadcast(context, 0, intent, flags)
+    }
+
+    private fun isCompact(appWidgetManager: AppWidgetManager, appWidgetId: Int): Boolean {
+        val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
+        val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+        return minHeight in 1 until COMPACT_HEIGHT_DP
     }
 
     private fun buildSummary(overdue: Int, today: Int): String {
@@ -92,7 +120,7 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
             overdue > 0 && today > 0 -> "$overdue overdue · $today today"
             overdue > 0 -> "$overdue overdue"
             today > 0 -> "$today today"
-            else -> ""
+            else -> "All caught up"
         }
     }
 }

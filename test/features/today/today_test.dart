@@ -223,6 +223,155 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
+  group('buildTodayEntries — raw row handling', () {
+    Map<String, dynamic> occRow({
+      required String id,
+      required String taskId,
+      required String householdId,
+      required DateTime scheduledAt,
+      String? completedAt,
+    }) => {
+      'id': id,
+      'task_id': taskId,
+      'household_id': householdId,
+      'scheduled_at': scheduledAt.toIso8601String(),
+      'completed_at': completedAt,
+    };
+
+    Map<String, dynamic> taskRow({
+      required String id,
+      required String householdId,
+      required String title,
+      String? dueAt,
+      String? completedAt,
+      String recurrenceType = 'none',
+    }) => {
+      'id': id,
+      'household_id': householdId,
+      'title': title,
+      'due_at': dueAt,
+      'completed_at': completedAt,
+      'recurrence_type': recurrenceType,
+    };
+
+    test('incomplete occurrence is active, not completed-today', () {
+      final result = buildTodayEntries(
+        occRows: [
+          occRow(
+            id: 'o1',
+            taskId: 't1',
+            householdId: 'hh',
+            scheduledAt: _todayStart,
+          ),
+        ],
+        taskRows: [
+          taskRow(
+            id: 't1',
+            householdId: 'hh',
+            title: 'Task',
+            dueAt: _todayStart.toIso8601String(),
+          ),
+        ],
+        householdNames: {'hh': 'Home'},
+        now: _fixedNow,
+      );
+      expect(result.active.length, 1);
+      expect(result.completedToday, isEmpty);
+    });
+
+    test('occurrence completed today moves to completed-today', () {
+      final completedAt = _todayStart.add(const Duration(hours: 1));
+      final result = buildTodayEntries(
+        occRows: [
+          occRow(
+            id: 'o1',
+            taskId: 't1',
+            householdId: 'hh',
+            scheduledAt: _todayStart,
+            completedAt: completedAt.toIso8601String(),
+          ),
+        ],
+        taskRows: [
+          taskRow(
+            id: 't1',
+            householdId: 'hh',
+            title: 'Task',
+            dueAt: _todayStart.toIso8601String(),
+          ),
+        ],
+        householdNames: {'hh': 'Home'},
+        now: _fixedNow,
+      );
+      expect(result.active, isEmpty);
+      expect(result.completedToday.length, 1);
+    });
+
+    test('occurrence completed on a previous day is excluded entirely', () {
+      final completedYesterday = _todayStart.subtract(const Duration(hours: 2));
+      final result = buildTodayEntries(
+        occRows: [
+          occRow(
+            id: 'o1',
+            taskId: 't1',
+            householdId: 'hh',
+            scheduledAt: _todayStart,
+            completedAt: completedYesterday.toIso8601String(),
+          ),
+        ],
+        taskRows: [
+          taskRow(
+            id: 't1',
+            householdId: 'hh',
+            title: 'Task',
+            dueAt: _todayStart.toIso8601String(),
+          ),
+        ],
+        householdNames: {'hh': 'Home'},
+        now: _fixedNow,
+      );
+      expect(result.active, isEmpty);
+      expect(result.completedToday, isEmpty);
+    });
+
+    test('anytime task completed today appears in completed-today', () {
+      final completedAt = _todayStart.add(const Duration(hours: 2));
+      final result = buildTodayEntries(
+        occRows: const [],
+        taskRows: [
+          taskRow(
+            id: 't2',
+            householdId: 'hh',
+            title: 'Anytime task',
+            completedAt: completedAt.toIso8601String(),
+          ),
+        ],
+        householdNames: {'hh': 'Home'},
+        now: _fixedNow,
+      );
+      expect(result.completedToday.length, 1);
+      expect(result.completedToday.single.sourceType, TodayEntrySource.anytime);
+    });
+
+    test('a dated task row is not treated as an anytime task', () {
+      final result = buildTodayEntries(
+        occRows: const [],
+        taskRows: [
+          taskRow(
+            id: 't3',
+            householdId: 'hh',
+            title: 'Dated',
+            dueAt: _todayStart.toIso8601String(),
+          ),
+        ],
+        householdNames: {'hh': 'Home'},
+        now: _fixedNow,
+      );
+      expect(result.active, isEmpty);
+      expect(result.completedToday, isEmpty);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   group('TodayScreen — widget tests', () {
     /// [navBarHeight] wraps the screen in a stand-in for the app shell — the
     /// same `Scaffold(extendBody: true)` + bottom navigation arrangement that

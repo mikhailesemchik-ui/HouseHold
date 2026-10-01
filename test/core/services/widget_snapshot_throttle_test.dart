@@ -32,13 +32,14 @@ void main() {
 
   Future<void> push(int count) => WidgetSnapshotService.update(
     sections: sectionsWithToday(entries(count)),
+    completedToday: const [],
     now: now,
   );
 
   setUp(() {
     written = [];
     WidgetSnapshotService.resetForTest();
-    WidgetSnapshotService.writer = (sections, _) async {
+    WidgetSnapshotService.writer = (sections, completedToday, now) async {
       written.add(sections['today']!.length);
     };
   });

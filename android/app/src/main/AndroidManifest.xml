@@ -55,6 +55,17 @@
                 android:resource="@xml/household_os_widget_info" />
         </receiver>
 
+        <service
+            android:name=".HouseholdOsWidgetRemoteViewsService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <!-- Delivers widget row taps (complete/reopen) to Dart in the
+             background, without opening the app. -->
+        <receiver
+            android:name=".HouseholdOsWidgetActionReceiver"
+            android:exported="false" />
+
         <!-- Required by flutter_local_notifications to show scheduled reminders
              and to reschedule them after reboot or app update. -->
         <receiver
