@@ -139,23 +139,15 @@ The codebase builds for iOS; these integrations haven't been validated there yet
 
 ## Run locally
 
-Requires Flutter (stable) and an Android SDK. The app takes its Supabase project as compile-time defines:
+Requires Flutter stable and an Android SDK.
 
 ```bash
 flutter pub get
 
-# debug run
 flutter run \
   --dart-define=SUPABASE_URL=<project-url> \
   --dart-define=SUPABASE_ANON_KEY=<publishable-key>
-
-# release APK
-flutter build apk --release \
-  --dart-define=SUPABASE_URL=<project-url> \
-  --dart-define=SUPABASE_ANON_KEY=<publishable-key>
 ```
-
-`android/app/google-services.json` is tracked intentionally — it's Firebase Android client configuration, required for a reproducible build, not a secret.
 
 ## Platform
 
