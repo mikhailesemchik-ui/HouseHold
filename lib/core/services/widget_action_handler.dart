@@ -5,14 +5,21 @@ import 'package:household_os/features/tasks/data/task_repository.dart';
 import 'package:household_os/features/today/data/today_repository.dart';
 import 'package:household_os/features/today/presentation/today_provider.dart'
     show buildTodayEntries, groupTodayEntries;
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Handles a complete/reopen tap that arrived from the home-screen widget
 /// collection, without opening the app. Runs in a background isolate.
+///
+/// Duplicate taps for the same id while one is already in flight are
+/// deduplicated natively (WorkManager `enqueueUniqueWork` with
+/// `ExistingWorkPolicy.KEEP` in HouseholdOsWidgetActionReceiver) — this
+/// handler never runs concurrently for the same id, so it does not need its
+/// own in-flight bookkeeping. An earlier SharedPreferences-backed guard here
+/// was removed: under the previous `REPLACE` policy a cancelled in-flight
+/// worker could be killed before clearing its own flag, permanently
+/// blocking every future tap for that id. Any such stale entry left over
+/// from that bug is simply unused now.
 class WidgetActionHandler {
   const WidgetActionHandler();
-
-  static const _inFlightKey = 'widget_action_inflight_ids';
 
   /// [id] is an occurrenceId when [source] is `occurrence`, a taskId when
   /// [source] is `anytime` — the same identifiers TaskRepository expects.
@@ -24,12 +31,6 @@ class WidgetActionHandler {
     required String source,
     required String action,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final inFlight = (prefs.getStringList(_inFlightKey) ?? <String>[]).toSet();
-    if (inFlight.contains(id)) return; // a duplicate tap while one is pending
-    inFlight.add(id);
-    await prefs.setStringList(_inFlightKey, inFlight.toList());
-
     try {
       if (supabaseClient.auth.currentUser == null) return;
 
@@ -45,9 +46,6 @@ class WidgetActionHandler {
     } catch (_) {
       // Mutation failed server-side; fall through and resync the snapshot so
       // the widget reflects real state rather than a false optimistic flip.
-    } finally {
-      inFlight.remove(id);
-      await prefs.setStringList(_inFlightKey, inFlight.toList());
     }
 
     await _refreshSnapshot();

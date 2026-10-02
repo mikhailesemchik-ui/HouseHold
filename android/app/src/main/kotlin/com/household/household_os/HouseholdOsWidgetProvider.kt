@@ -8,6 +8,7 @@ import android.net.Uri
 import android.app.PendingIntent
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
@@ -24,8 +25,37 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray,
     ) {
+        Log.d(TAG, "onUpdate ids=${appWidgetIds.toList()} t=${System.currentTimeMillis()}")
         for (id in appWidgetIds) {
             updateWidget(context, appWidgetManager, id)
+        }
+    }
+
+    companion object {
+        private const val TAG = "WidgetAction"
+
+        /**
+         * Rebuilds and pushes RemoteViews for every placed instance of this
+         * widget, in-process. [HomeWidgetPlugin]'s own `updateWidget` does
+         * this by having the app send itself an ACTION_APPWIDGET_UPDATE
+         * broadcast; on Samsung that self-broadcast was observed to be
+         * deferred indefinitely by One UI's background standby-bucket
+         * throttling once the process has no foreground UI (confirmed via
+         * physical-device logcat: the broadcast never reached onUpdate after
+         * a successful widget-triggered mutation). Calling this directly
+         * from the worker that just finished the mutation skips that
+         * broadcast hop entirely — same rendering code, no indirection to
+         * get deferred.
+         */
+        fun refreshAll(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(
+                android.content.ComponentName(context, HouseholdOsWidgetProvider::class.java),
+            )
+            val provider = HouseholdOsWidgetProvider()
+            for (id in ids) {
+                provider.updateWidget(context, manager, id)
+            }
         }
     }
 
@@ -91,6 +121,7 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
         appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
+        Log.d(TAG, "widget refresh complete id=$appWidgetId t=${System.currentTimeMillis()}")
     }
 
     /**

@@ -3,9 +3,11 @@ package com.household.household_os
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 
 /**
@@ -34,17 +36,25 @@ class HouseholdOsWidgetActionReceiver : BroadcastReceiver() {
             .build()
         val request = OneTimeWorkRequestBuilder<HouseholdOsWidgetActionWorker>()
             .setInputData(data)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
 
-        // One in-flight job per task/occurrence id: a second tap while the
-        // first is still running replaces it rather than queuing a conflict.
+        Log.d(TAG, "receiver reached id=${id.hashCode()} action=$action t=${System.currentTimeMillis()}")
+
+        // One in-flight job per task/occurrence id: KEEP means a tap that
+        // arrives while the previous one for the same id is still
+        // enqueued/running is dropped rather than cancelling/restarting it.
+        // Once that work reaches a terminal state, the next tap starts a
+        // fresh one. REPLACE previously let repeated taps cancel the
+        // in-flight worker (and its headless engine) mid-mutation.
         WorkManager.getInstance(context.applicationContext)
-            .enqueueUniqueWork("widget_action_$id", ExistingWorkPolicy.REPLACE, request)
+            .enqueueUniqueWork("widget_action_$id", ExistingWorkPolicy.KEEP, request)
     }
 
     companion object {
         const val KEY_ID = "id"
         const val KEY_SOURCE = "source"
         const val KEY_ACTION = "action"
+        private const val TAG = "WidgetAction"
     }
 }
