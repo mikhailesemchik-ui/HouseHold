@@ -88,7 +88,7 @@ private class HouseholdOsWidgetRemoteViewsFactory(
     override fun hasStableIds(): Boolean = true
 
     private fun loadTasks() {
-        tasks = try {
+        val base = try {
             val sp = HomeWidgetPlugin.getData(context)
             val raw = sp.getString(PREF_KEY, null)
             if (raw == null) {
@@ -105,6 +105,40 @@ private class HouseholdOsWidgetRemoteViewsFactory(
         } catch (e: Exception) {
             emptyList()
         }
+        tasks = applyOptimisticOverlay(base)
+    }
+
+    /**
+     * Renders each row as if its pending complete/reopen action had already
+     * landed, grouping optimistically-completed rows after the active ones
+     * and optimistically-reopened rows back among the active ones. The
+     * authoritative snapshot (and its true per-item ordering) is untouched —
+     * this only reorders the in-memory render list for the few seconds a
+     * mutation is in flight, so the true order reasserts itself the moment
+     * the overlay clears and the next authoritative refresh runs.
+     */
+    private fun applyOptimisticOverlay(base: List<JSONObject>): List<JSONObject> {
+        val overlay = WidgetOptimisticOverlay.snapshot(context)
+        if (overlay.isEmpty()) return base
+
+        val active = mutableListOf<JSONObject>()
+        val completed = mutableListOf<JSONObject>()
+        for (task in base) {
+            val entry = overlay[task.optString("id")]
+            if (entry == null) {
+                if (task.optBoolean("completed", false)) completed.add(task) else active.add(task)
+                continue
+            }
+            val rendered = JSONObject(task.toString())
+            rendered.put("completed", entry.targetCompleted)
+            if (entry.targetCompleted) {
+                rendered.put("label", "Done")
+                completed.add(rendered)
+            } else {
+                active.add(rendered)
+            }
+        }
+        return active + completed
     }
 
     companion object {

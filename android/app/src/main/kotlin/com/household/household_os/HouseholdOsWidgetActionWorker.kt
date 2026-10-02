@@ -31,14 +31,18 @@ class HouseholdOsWidgetActionWorker(
 
         Log.d(TAG, "worker start id=${id.hashCode()} t=${System.currentTimeMillis()}")
         val ok = runOnHeadlessEngine(id, source, action)
-        if (ok) {
-            // Dart already wrote the fresh snapshot and sent home_widget's own
-            // ACTION_APPWIDGET_UPDATE self-broadcast, but that broadcast was
-            // observed (physical-device logcat) to never arrive while this
-            // process has no foreground UI — refresh directly, in-process, so
-            // the widget doesn't depend on a hop that can be deferred.
-            HouseholdOsWidgetProvider.refreshAll(applicationContext)
-        }
+        // Authoritative result is known now (success: Dart already rewrote
+        // the snapshot; failure: snapshot is whatever it was before this
+        // tap) — the optimistic overlay's job is done either way. Clearing
+        // it and refreshing from pure authoritative data is what actually
+        // rolls a failed optimistic change back to the real server state.
+        WidgetOptimisticOverlay.clear(applicationContext, id)
+        // Dart already wrote the fresh snapshot and sent home_widget's own
+        // ACTION_APPWIDGET_UPDATE self-broadcast, but that broadcast was
+        // observed (physical-device logcat) to never arrive while this
+        // process has no foreground UI — refresh directly, in-process, so
+        // the widget doesn't depend on a hop that can be deferred.
+        HouseholdOsWidgetProvider.refreshAll(applicationContext)
         Log.d(TAG, "worker done id=${id.hashCode()} ok=$ok t=${System.currentTimeMillis()}")
         return if (ok) Result.success() else Result.failure()
     }
