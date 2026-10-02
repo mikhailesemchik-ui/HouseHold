@@ -92,19 +92,35 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_header_click, launchIntent)
 
         val compact = isCompact(appWidgetManager, appWidgetId)
-        val adapterIntent = Intent(context, HouseholdOsWidgetRemoteViewsService::class.java)
-        // The compact flag is encoded into the data URI, not just as an extra:
-        // Intent equality for RemoteViewsFactory caching ignores extras, so a
-        // same-URI intent would keep reusing a factory built with the old
-        // compact value and never reflect a resize.
-        adapterIntent.data = Uri.parse(
-            "household-os-widget://adapter/$appWidgetId?compact=$compact",
-        )
-        adapterIntent.putExtra(HouseholdOsWidgetRemoteViewsService.EXTRA_COMPACT, compact)
-        views.setRemoteAdapter(R.id.widget_list, adapterIntent)
         views.setEmptyView(R.id.widget_list, R.id.widget_empty)
-
         views.setPendingIntentTemplate(R.id.widget_list, actionPendingIntentTemplate(context))
+
+        if (Build.VERSION.SDK_INT >= 31) {
+            // The reordered collection rides in this same RemoteViews update,
+            // so the checkbox state and the row's new position arrive in one
+            // paint — notifyAppWidgetViewDataChanged() below is the legacy
+            // path's async invalidate-then-refetch, which visibly leaves the
+            // old row order on screen for a beat while the launcher re-queries
+            // the factory; a direct collection has no such second stage.
+            val items = RemoteViews.RemoteCollectionItems.Builder()
+                .setHasStableIds(true)
+                .setViewTypeCount(1)
+            for (task in loadRenderableTasks(context)) {
+                items.addItem(stableTaskItemId(task.id), buildTaskRowRemoteViews(context, task, compact))
+            }
+            views.setRemoteAdapter(R.id.widget_list, items.build())
+        } else {
+            val adapterIntent = Intent(context, HouseholdOsWidgetRemoteViewsService::class.java)
+            // The compact flag is encoded into the data URI, not just as an
+            // extra: Intent equality for RemoteViewsFactory caching ignores
+            // extras, so a same-URI intent would keep reusing a factory built
+            // with the old compact value and never reflect a resize.
+            adapterIntent.data = Uri.parse(
+                "household-os-widget://adapter/$appWidgetId?compact=$compact",
+            )
+            adapterIntent.putExtra(HouseholdOsWidgetRemoteViewsService.EXTRA_COMPACT, compact)
+            views.setRemoteAdapter(R.id.widget_list, adapterIntent)
+        }
 
         if (showNames) {
             views.setViewVisibility(R.id.widget_list, View.VISIBLE)
@@ -120,7 +136,12 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         }
 
         appWidgetManager.updateAppWidget(appWidgetId, views)
-        appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
+        if (Build.VERSION.SDK_INT < 31) {
+            // The API 31+ path above already carries the full, reordered
+            // collection inside the updateAppWidget() call — nothing left to
+            // invalidate.
+            appWidgetManager.notifyAppWidgetViewDataChanged(appWidgetId, R.id.widget_list)
+        }
         Log.d(TAG, "widget refresh complete id=$appWidgetId t=${System.currentTimeMillis()}")
     }
 
