@@ -76,11 +76,28 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         val sp = HomeWidgetPlugin.getData(context)
         val raw = sp.getString("widget_snapshot_json", null)
         val root = if (raw != null) JSONObject(raw) else JSONObject()
-        // activeCount/completedTodayCount are additive snapshot fields; a
-        // stale cached snapshot written before they existed just reads 0.
-        val activeCount = root.optInt("activeCount", 0)
-        val completedTodayCount = root.optInt("completedTodayCount", 0)
         val showNames = root.optString("privacy", "counts_only") == "show_names"
+
+        // In show_names mode, task-level data is available locally, so the
+        // header reuses the same optimistic-overlay-adjusted list the row
+        // collection renders from — counting it directly means the header
+        // always describes the same state the rows already show, instead of
+        // lagging a refresh cycle behind on the raw authoritative counts.
+        // counts_only mode never stores task-level data (nothing is tappable
+        // there either), so there is nothing to adjust and the authoritative
+        // snapshot counts are used as-is.
+        val renderTasks = if (showNames) loadRenderableTasks(context) else emptyList()
+        val activeCount: Int
+        val completedTodayCount: Int
+        if (showNames) {
+            activeCount = renderTasks.count { !it.completed }
+            completedTodayCount = renderTasks.count { it.completed }
+        } else {
+            // Additive snapshot fields; a stale cached snapshot written
+            // before they existed just reads 0.
+            activeCount = root.optInt("activeCount", 0)
+            completedTodayCount = root.optInt("completedTodayCount", 0)
+        }
 
         val views = RemoteViews(context.packageName, R.layout.household_os_widget)
 
@@ -107,7 +124,7 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
             val items = RemoteViews.RemoteCollectionItems.Builder()
                 .setHasStableIds(true)
                 .setViewTypeCount(1)
-            for (task in loadRenderableTasks(context)) {
+            for (task in renderTasks) {
                 items.addItem(stableTaskItemId(task.id), buildTaskRowRemoteViews(context, task, compact))
             }
             views.setRemoteAdapter(R.id.widget_list, items.build())
