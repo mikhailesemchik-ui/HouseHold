@@ -50,6 +50,7 @@ void main() {
       final items = WidgetSnapshotService.buildItems(
         sections: sections(),
         completedToday: const [],
+        now: now,
       );
       expect(items, isEmpty);
     });
@@ -95,6 +96,7 @@ void main() {
           ],
         ),
         completedToday: const [],
+        now: now,
       );
 
       expect(items.map((e) => e.title).toList(), [
@@ -122,6 +124,7 @@ void main() {
       final items = WidgetSnapshotService.buildItems(
         sections: sections(today: entries),
         completedToday: const [],
+        now: now,
       );
       expect(items.length, 6);
     });
@@ -148,10 +151,14 @@ void main() {
             completedAt: DateTime(2026, 8, 27, 8, 0),
           ),
         ],
+        now: now,
       );
       expect(items.map((e) => e.title).toList(), ['Active', 'Completed']);
       expect(items.last.completed, isTrue);
-      expect(items.last.label, 'Done');
+      // Real due-bucket label, not a hardcoded "Done" — activeTime falls on
+      // the same day as `now`, so this completed entry's true bucket is
+      // "Today" (the same one it would land in if it were reopened).
+      expect(items.last.label, 'Today');
     });
 
     test('most recently completed-today task sorts first among completed', () {
@@ -171,6 +178,7 @@ void main() {
             completedAt: DateTime(2026, 8, 27, 11, 0),
           ),
         ],
+        now: now,
       );
       expect(items.map((e) => e.title).toList(), ['Late', 'Early']);
     });
@@ -188,6 +196,7 @@ void main() {
           ],
         ),
         completedToday: const [],
+        now: now,
       );
       expect(items.single.id, 'occ-t1');
       expect(items.single.source, 'occurrence');
@@ -206,6 +215,7 @@ void main() {
           ],
         ),
         completedToday: const [],
+        now: now,
       );
       expect(items.single.id, 't2');
       expect(items.single.source, 'anytime');
@@ -225,6 +235,7 @@ void main() {
           ],
         ),
         completedToday: const [],
+        now: now,
       );
       expect(items.first.label, matches(r'\w{3} \d+ \w{3}'));
     });
@@ -245,6 +256,7 @@ void main() {
           ],
         ),
         completedToday: const [],
+        now: now,
       );
       final encoded = jsonEncode(items.map((e) => e.toJson()).toList());
       final decoded = jsonDecode(encoded) as List<dynamic>;

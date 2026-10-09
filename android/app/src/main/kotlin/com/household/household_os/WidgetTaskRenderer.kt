@@ -58,25 +58,27 @@ private fun applyOptimisticOverlay(context: Context, base: List<JSONObject>): Li
     val completed = mutableListOf<RenderTask>()
     for (task in base) {
         val entry = overlay[task.optString("id")]
-        val item = when {
-            entry == null -> task.toRenderTask()
-            entry.desiredCompleted -> task.toRenderTask(completedOverride = true, labelOverride = "Done")
-            else -> task.toRenderTask(completedOverride = false)
+        // The snapshot's label is always the item's real due-bucket
+        // (Overdue/Today/Anytime/a date), independent of completed status
+        // (see widget_snapshot.dart's _dueLabelFor) — so flipping
+        // `completed` alone is enough for either direction to immediately
+        // show its correct real status, with no placeholder state needed.
+        val item = if (entry == null) {
+            task.toRenderTask()
+        } else {
+            task.toRenderTask(completedOverride = entry.desiredCompleted)
         }
         if (item.completed) completed.add(item) else active.add(item)
     }
     return active + completed
 }
 
-private fun JSONObject.toRenderTask(
-    completedOverride: Boolean? = null,
-    labelOverride: String? = null,
-): RenderTask = RenderTask(
+private fun JSONObject.toRenderTask(completedOverride: Boolean? = null): RenderTask = RenderTask(
     id = optString("id"),
     source = optString("source"),
     title = optString("title"),
     household = optString("household"),
-    label = labelOverride ?: optString("label"),
+    label = optString("label"),
     completed = completedOverride ?: optBoolean("completed", false),
 )
 
@@ -158,6 +160,7 @@ fun buildTaskRowRemoteViews(context: Context, task: RenderTask, compact: Boolean
             pillTextColor = COLOR_NEUTRAL_TEXT
         }
     }
+    views.setViewVisibility(R.id.row_status_pill, View.VISIBLE)
     views.setTextViewText(R.id.row_status_pill, pillText)
     views.setInt(R.id.row_status_pill, "setBackgroundResource", pillBg)
     views.setTextColor(R.id.row_status_pill, pillTextColor)

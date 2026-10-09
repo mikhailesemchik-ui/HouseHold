@@ -81,12 +81,17 @@ class WidgetSnapshotService {
   }
 
   /// Orders active entries (overdue → today → anytime → upcoming) followed
-  /// by entries completed today, and converts each to a display row. Bucket
-  /// labels trust which section an entry is already in — the caller (Today's
-  /// own grouping) is the single source of truth for overdue/today/upcoming.
+  /// by entries completed today, and converts each to a display row. Active
+  /// labels trust which section an entry is already in — the caller
+  /// (Today's own grouping) is the single source of truth for
+  /// overdue/today/upcoming. Completed entries get their real due-bucket
+  /// label too (not a hardcoded "Done") — the widget's native layer uses it
+  /// to show the correct status immediately on an optimistic reopen,
+  /// without waiting for the next authoritative refresh.
   static List<WidgetTaskItem> buildItems({
     required Map<String, List<TodayEntry>> sections,
     required List<TodayEntry> completedToday,
+    required DateTime now,
   }) {
     final items = <WidgetTaskItem>[
       ...?sections['overdue']?.map((e) => _toItem(e, label: 'Overdue')),
@@ -100,9 +105,26 @@ class WidgetSnapshotService {
     final sortedCompleted = [...completedToday]
       ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
     items.addAll(
-      sortedCompleted.map((e) => _toItem(e, label: 'Done', completed: true)),
+      sortedCompleted.map(
+        (e) => _toItem(e, label: _dueLabelFor(e, now), completed: true),
+      ),
     );
     return items;
+  }
+
+  /// The bucket label [e] would have if it were active right now — same
+  /// overdue/today/upcoming boundaries as groupTodayEntries (not imported
+  /// here: today_provider.dart already imports this file, and that screen
+  /// layer's provider/notification dependencies have no place in this
+  /// lean, also-headless-engine-used serialization layer).
+  static String _dueLabelFor(TodayEntry e, DateTime now) {
+    final scheduledAt = e.scheduledAt;
+    if (scheduledAt == null) return 'Anytime';
+    final todayStart = DateTime(now.year, now.month, now.day).toUtc();
+    final tomorrowStart = DateTime(now.year, now.month, now.day + 1).toUtc();
+    if (scheduledAt.isBefore(todayStart)) return 'Overdue';
+    if (scheduledAt.isBefore(tomorrowStart)) return 'Today';
+    return _shortDate(scheduledAt);
   }
 
   static WidgetTaskItem _toItem(
@@ -194,6 +216,7 @@ class WidgetSnapshotService {
           ? buildItems(
               sections: sections,
               completedToday: completedToday,
+              now: now,
             ).map((e) => e.toJson()).toList()
           : const [],
     };
