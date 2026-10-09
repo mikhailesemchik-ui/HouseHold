@@ -76,13 +76,15 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         val sp = HomeWidgetPlugin.getData(context)
         val raw = sp.getString("widget_snapshot_json", null)
         val root = if (raw != null) JSONObject(raw) else JSONObject()
-        val overdueCount = root.optInt("overdueCount", 0)
-        val todayCount = root.optInt("todayCount", 0)
+        // activeCount/completedTodayCount are additive snapshot fields; a
+        // stale cached snapshot written before they existed just reads 0.
+        val activeCount = root.optInt("activeCount", 0)
+        val completedTodayCount = root.optInt("completedTodayCount", 0)
         val showNames = root.optString("privacy", "counts_only") == "show_names"
 
         val views = RemoteViews(context.packageName, R.layout.household_os_widget)
 
-        views.setTextViewText(R.id.widget_summary, buildSummary(overdueCount, todayCount))
+        views.setTextViewText(R.id.widget_summary, buildSummary(activeCount, completedTodayCount))
 
         val launchIntent = HomeWidgetLaunchIntent.getActivity(
             context,
@@ -131,7 +133,7 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_list, View.GONE)
             views.setTextViewText(
                 R.id.widget_empty,
-                if (overdueCount > 0 || todayCount > 0) "" else "Nothing due.",
+                if (activeCount > 0) "" else "Nothing due.",
             )
         }
 
@@ -167,11 +169,11 @@ class HouseholdOsWidgetProvider : AppWidgetProvider() {
         return minHeight in 1 until COMPACT_HEIGHT_DP
     }
 
-    private fun buildSummary(overdue: Int, today: Int): String {
+    private fun buildSummary(active: Int, completedToday: Int): String {
         return when {
-            overdue > 0 && today > 0 -> "$overdue overdue · $today today"
-            overdue > 0 -> "$overdue overdue"
-            today > 0 -> "$today today"
+            active > 0 && completedToday > 0 -> "$active to do · $completedToday completed"
+            active > 0 -> "$active to do"
+            completedToday > 0 -> "All caught up · $completedToday completed"
             else -> "All caught up"
         }
     }

@@ -2,6 +2,7 @@ package com.household.household_os
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Paint
 import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
@@ -82,22 +83,84 @@ private fun JSONObject.toRenderTask(
 /** Stable per-row id, shared by both collection-delivery paths. */
 fun stableTaskItemId(id: String): Long = id.hashCode().toLong()
 
+private const val COLOR_TITLE = 0xFF20231F.toInt()
+private const val COLOR_TITLE_MUTED = 0xFF747A72.toInt()
+private const val COLOR_OVERDUE_TEXT = 0xFFC96F66.toInt()
+private const val COLOR_SAGE_TEXT = 0xFF50674E.toInt()
+private const val COLOR_NEUTRAL_TEXT = 0xFF5C5F55.toInt()
+private const val COLOR_COMPLETED_TEXT = 0xFF747A72.toInt()
+
 /** Builds one row's RemoteViews — identical rendering for both collection-delivery paths. */
 fun buildTaskRowRemoteViews(context: Context, task: RenderTask, compact: Boolean): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.household_os_widget_row)
+    val isOverdue = !task.completed && task.label == "Overdue"
 
     views.setTextViewText(R.id.row_title, task.title)
-    views.setImageViewResource(
-        R.id.row_check,
-        if (task.completed) R.drawable.ic_widget_check else R.drawable.ic_widget_circle,
+    views.setTextColor(R.id.row_title, if (task.completed) COLOR_TITLE_MUTED else COLOR_TITLE)
+    // setPaintFlags *replaces* the flags, rather than toggling a bit, so a
+    // recycled row (legacy RemoteViewsFactory path) can't keep a stale
+    // strikethrough from whatever it last rendered.
+    views.setInt(
+        R.id.row_title,
+        "setPaintFlags",
+        if (task.completed) {
+            Paint.ANTI_ALIAS_FLAG or Paint.STRIKE_THRU_TEXT_FLAG
+        } else {
+            Paint.ANTI_ALIAS_FLAG
+        },
     )
 
-    if (compact) {
-        views.setViewVisibility(R.id.row_detail, View.GONE)
-    } else {
-        views.setViewVisibility(R.id.row_detail, View.VISIBLE)
-        views.setTextViewText(R.id.row_detail, "${task.household} · ${task.label}")
+    val checkBg = when {
+        task.completed -> R.drawable.widget_check_circle_completed
+        isOverdue -> R.drawable.widget_check_circle_overdue
+        else -> R.drawable.widget_check_circle_active
     }
+    val checkIcon = when {
+        task.completed -> R.drawable.ic_widget_check
+        isOverdue -> R.drawable.ic_widget_ring_overdue
+        else -> R.drawable.ic_widget_circle
+    }
+    views.setInt(R.id.row_check_target, "setBackgroundResource", checkBg)
+    views.setImageViewResource(R.id.row_check, checkIcon)
+
+    if (compact) {
+        views.setViewVisibility(R.id.row_household_row, View.GONE)
+    } else {
+        views.setViewVisibility(R.id.row_household_row, View.VISIBLE)
+        views.setTextViewText(R.id.row_detail, task.household)
+    }
+
+    val pillText: String
+    val pillBg: Int
+    val pillTextColor: Int
+    when {
+        task.completed -> {
+            pillText = "Completed"
+            pillBg = R.drawable.widget_pill_completed
+            pillTextColor = COLOR_COMPLETED_TEXT
+        }
+        isOverdue -> {
+            pillText = "Overdue"
+            pillBg = R.drawable.widget_pill_overdue
+            pillTextColor = COLOR_OVERDUE_TEXT
+        }
+        task.label == "Today" -> {
+            pillText = "Today"
+            pillBg = R.drawable.widget_pill_sage
+            pillTextColor = COLOR_SAGE_TEXT
+        }
+        else -> {
+            // "Anytime" or a short upcoming date (e.g. "Mon 5 Oct") — shown
+            // verbatim so a real due date is never silently replaced with a
+            // generic label.
+            pillText = task.label
+            pillBg = R.drawable.widget_pill_neutral
+            pillTextColor = COLOR_NEUTRAL_TEXT
+        }
+    }
+    views.setTextViewText(R.id.row_status_pill, pillText)
+    views.setInt(R.id.row_status_pill, "setBackgroundResource", pillBg)
+    views.setTextColor(R.id.row_status_pill, pillTextColor)
 
     val action = if (task.completed) "reopen" else "complete"
     val uri = Uri.parse(

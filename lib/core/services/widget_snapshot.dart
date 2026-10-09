@@ -177,11 +177,17 @@ class WidgetSnapshotService {
     final mode = await WidgetSettings.getPrivacyMode();
     final overdueCount = sections['overdue']!.length;
     final todayCount = sections['today']!.length;
+    final activeCount = sections.values.fold<int>(
+      0,
+      (sum, entries) => sum + entries.length,
+    );
     final showNames = mode == WidgetPrivacyMode.showNames;
 
     final payload = {
       'overdueCount': overdueCount,
       'todayCount': todayCount,
+      'activeCount': activeCount,
+      'completedTodayCount': completedToday.length,
       'privacy': showNames ? 'show_names' : 'counts_only',
       'updatedAt': now.toUtc().toIso8601String(),
       'tasks': showNames

@@ -1,5 +1,5 @@
-<!-- Active (not overdue) completion ring: a thin dark-sage stroke, no fill,
-     drawn over widget_check_circle_active's pale sage background. -->
+<!-- Overdue completion ring: a thin muted-red stroke, no fill, drawn over
+     widget_check_circle_overdue's pale red background. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -7,7 +7,7 @@
     android:viewportHeight="24">
     <path
         android:pathData="M12,3A9,9 0,1 0,12 21A9,9 0,0 0,12 3Z"
-        android:strokeColor="#2E6B4E"
+        android:strokeColor="#C96F66"
         android:strokeWidth="1.6"
         android:fillColor="#00000000" />
 </vector>
