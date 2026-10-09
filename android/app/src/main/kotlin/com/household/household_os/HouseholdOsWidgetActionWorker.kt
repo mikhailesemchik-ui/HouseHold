@@ -26,24 +26,53 @@ class HouseholdOsWidgetActionWorker(
 
     override suspend fun doWork(): Result {
         val id = inputData.getString(HouseholdOsWidgetActionReceiver.KEY_ID) ?: return Result.failure()
-        val source = inputData.getString(HouseholdOsWidgetActionReceiver.KEY_SOURCE) ?: return Result.failure()
-        val action = inputData.getString(HouseholdOsWidgetActionReceiver.KEY_ACTION) ?: return Result.failure()
 
-        Log.d(TAG, "worker start id=${id.hashCode()} t=${System.currentTimeMillis()}")
-        val ok = runOnHeadlessEngine(id, source, action)
-        // Authoritative result is known now (success: Dart already rewrote
-        // the snapshot; failure: snapshot is whatever it was before this
-        // tap) — the optimistic overlay's job is done either way. Clearing
-        // it and refreshing from pure authoritative data is what actually
-        // rolls a failed optimistic change back to the real server state.
-        WidgetOptimisticOverlay.clear(applicationContext, id)
+        // Re-read the desired state fresh, now — never trust what triggered
+        // this particular enqueue. WorkManager may have chained several of
+        // these (one per tap) via APPEND_OR_REPLACE; only the latest
+        // desired state at the moment each one actually runs matters. If a
+        // prior chained worker already reconciled this id (or nothing is
+        // pending, or the entry expired), there is nothing to do — exit
+        // before paying for a FlutterEngine boot.
+        val entry = WidgetOptimisticOverlay.get(applicationContext, id)
+        if (entry == null) {
+            Log.d(TAG, "worker skip (nothing pending) id=${id.hashCode()} t=${System.currentTimeMillis()}")
+            return Result.success()
+        }
+
+        Log.d(TAG, "worker start id=${id.hashCode()} rev=${entry.revision} t=${System.currentTimeMillis()}")
+        val action = if (entry.desiredCompleted) "complete" else "reopen"
+        val ok = runOnHeadlessEngine(id, entry.source, action)
+        Log.d(TAG, "worker mutation id=${id.hashCode()} rev=${entry.revision} ok=$ok t=${System.currentTimeMillis()}")
+
+        if (!ok && runAttemptCount < MAX_ATTEMPTS) {
+            // Transient/ambiguous failure: leave the desired state in place
+            // and let WorkManager's own backoff retry this same worker.
+            // completeTask/reopenTask and the complete_occurrence/
+            // reopen_occurrence RPCs are all idempotent target-state writes
+            // (proven in
+            // supabase/migrations/20260825000010_due_dates_and_recurrence.sql
+            // — the RPCs explicitly no-op if already in the target state),
+            // so retrying the same desired state is always safe regardless
+            // of whether the failed attempt partially landed server-side.
+            HouseholdOsWidgetProvider.refreshAll(applicationContext)
+            return Result.retry()
+        }
+
+        // Either it succeeded, or we're giving up after MAX_ATTEMPTS —
+        // either way this attempt's job is done. Only clear if nothing
+        // newer arrived while this ran: an older worker must never discard
+        // a desired state a later tap already wrote. If a newer revision
+        // exists it is already chained (every tap enqueues) and will
+        // reconcile itself.
+        WidgetOptimisticOverlay.clearIfRevisionMatches(applicationContext, id, entry.revision)
         // Dart already wrote the fresh snapshot and sent home_widget's own
         // ACTION_APPWIDGET_UPDATE self-broadcast, but that broadcast was
         // observed (physical-device logcat) to never arrive while this
         // process has no foreground UI — refresh directly, in-process, so
         // the widget doesn't depend on a hop that can be deferred.
         HouseholdOsWidgetProvider.refreshAll(applicationContext)
-        Log.d(TAG, "worker done id=${id.hashCode()} ok=$ok t=${System.currentTimeMillis()}")
+        Log.d(TAG, "worker done id=${id.hashCode()} rev=${entry.revision} ok=$ok t=${System.currentTimeMillis()}")
         return if (ok) Result.success() else Result.failure()
     }
 
@@ -114,5 +143,8 @@ class HouseholdOsWidgetActionWorker(
     companion object {
         private const val CHANNEL = "com.household.household_os/widget_action"
         private const val TAG = "WidgetAction"
+
+        /** Bounded retry count for a failed mutation — see doWork(). */
+        private const val MAX_ATTEMPTS = 3
     }
 }

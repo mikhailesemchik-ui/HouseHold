@@ -59,7 +59,7 @@ private fun applyOptimisticOverlay(context: Context, base: List<JSONObject>): Li
         val entry = overlay[task.optString("id")]
         val item = when {
             entry == null -> task.toRenderTask()
-            entry.targetCompleted -> task.toRenderTask(completedOverride = true, labelOverride = "Done")
+            entry.desiredCompleted -> task.toRenderTask(completedOverride = true, labelOverride = "Done")
             else -> task.toRenderTask(completedOverride = false)
         }
         if (item.completed) completed.add(item) else active.add(item)
