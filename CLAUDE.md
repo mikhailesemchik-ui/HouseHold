@@ -235,6 +235,8 @@ Before editing:
 ## Git Rules
 
 - Never mention Claude, Codex, AI, or generated-by text in commit messages.
+- Never add a `Co-Authored-By` trailer, an AI attribution signature, or any other unrequested co-author to a commit.
+- Review the exact commit message before creating the commit.
 - Do not commit unless explicitly asked.
 - Do not push unless explicitly asked.
 - Do not rewrite Git history.
