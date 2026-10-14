@@ -7,7 +7,7 @@ Tasks, shopping, and expenses for your household, synced live across everyone in
 [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Realtime-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![Android](https://img.shields.io/badge/Android-ARM64-3DDC84?logo=android&logoColor=white)](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0)
 [![Release](https://img.shields.io/badge/release-v1.0.0-informational)](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0)
-[![Tests](https://img.shields.io/badge/tests-523%20passing-brightgreen)](#reliability)
+[![Tests](https://img.shields.io/badge/tests-535%20passing-brightgreen)](#reliability)
 
 ### Download
 
@@ -41,6 +41,24 @@ Open the app, see what needs attention, do one thing, leave. There's no backlog 
 - **Members** — invite by code, transfer ownership, remove a member.
 - **Statistics** — completion trends and task-rotation suggestions.
 - **Reminders & widget** — local notifications for due tasks, plus a home-screen widget.
+
+## Android widget
+
+My Tasks as a home-screen widget: whatever is assigned to you, across every household, without opening the app.
+
+<p align="center">
+  <img src="docs/screenshots/widget/android-widget-showcase.png" width="42%" alt="Household OS Android widget showing overdue, today, anytime, upcoming, and completed tasks" />
+  <img src="docs/screenshots/widget/android-widget-compact.png" width="42%" alt="Household OS Android widget at its default compact size" />
+</p>
+
+- Same Overdue / Today / Anytime / Upcoming / Completed grouping as the Today screen, aggregated across households.
+- Tap a task to complete or reopen it directly from the widget — no app launch.
+- The row and the header counter update immediately; the write to Supabase happens in the background.
+- Completed-today tasks stay visible, struck through, until the next day.
+- Resizes between a compact layout (title and status only) and a larger one that also shows the household name, depending on the space given to it on the home screen.
+- A counts-only mode hides task titles and shows just "N to do · N completed," for a widget on a shared or lock-adjacent screen.
+
+Rendered with native Android `RemoteViews`, not a WebView or a persistently running Flutter engine. Tapping a task updates the widget immediately through a small native dispatcher, which then hands the actual completion to the existing Dart `TaskRepository`/Supabase RPC path in the background and reconciles the two once that write confirms.
 
 ## Architecture
 
@@ -110,20 +128,20 @@ This is backend-enforced access control, not end-to-end encryption — there's n
 
 - Scheduled local reminders for due tasks, with reboot-safe rescheduling.
 - Notification permission handling for Android 13+.
-- A home-screen widget backed by a native `AppWidgetProvider`.
 - State refresh on app resume, not just on first load.
 
-The codebase builds for iOS; these integrations haven't been validated there yet.
+The codebase builds for iOS; none of this — notifications or the home-screen widget — has been validated there yet.
 
 ## Reliability
 
 | Check | Result |
 |---|---|
 | `flutter analyze` | clean |
-| `flutter test` | 523/523 passing |
+| `flutter test` | 535/535 passing |
 | Multi-device realtime sync | verified (physical device + emulator, two identities) |
 | Offline startup | shows retry, not a blank screen or crash |
 | App-resume refresh | verified |
+| Android widget interaction | verified on physical hardware |
 
 ## Tech stack
 
