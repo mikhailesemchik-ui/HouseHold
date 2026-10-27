@@ -1,4 +1,5 @@
 import 'package:household_os/features/expenses/domain/expense.dart';
+import 'package:household_os/features/expenses/domain/settlement.dart';
 
 /// Who may rename an expense: its creator, its payer, a participant or the
 /// household owner. Mirrors the `expenses_update_authorized` policy; the
@@ -26,4 +27,17 @@ bool canDeleteExpense(
   return isOwner ||
       expense.createdBy == currentUserId ||
       expense.paidBy == currentUserId;
+}
+
+/// Mirrors the server rule: sender, recipient, original creator or owner.
+bool canCancelSettlement(
+  Settlement settlement,
+  String currentUserId, {
+  required bool isOwner,
+}) {
+  if (currentUserId.isEmpty) return false;
+  return isOwner ||
+      settlement.createdBy == currentUserId ||
+      settlement.fromUserId == currentUserId ||
+      settlement.toUserId == currentUserId;
 }

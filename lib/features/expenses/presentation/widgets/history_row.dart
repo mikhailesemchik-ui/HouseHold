@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_money_text.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
-import 'package:household_os/core/widgets/confirm_destructive.dart';
+import 'package:household_os/features/expenses/domain/cancellation_preview.dart';
+import 'package:household_os/features/expenses/presentation/widgets/cancel_financial_dialog.dart';
 import 'package:household_os/features/expenses/data/expense_repository.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/expense_permissions.dart';
@@ -48,37 +50,57 @@ String _formatDate(DateTime dt) {
 // colour alone.
 // ---------------------------------------------------------------------------
 
+/// The cancel RPCs raise HC002 (not allowed) or HC001 (no longer visible).
+bool _isPermissionError(Object error) =>
+    error is PostgrestException &&
+    (error.code == 'HC002' || error.code == 'HC001');
+
 class ExpenseHistoryRow extends StatelessWidget {
   const ExpenseHistoryRow({
     super.key,
     required this.expense,
     required this.currentUserId,
     this.isOwner = false,
+    this.expenses = const [],
+    this.settlements = const [],
   });
 
   final Expense expense;
+
+  /// Loaded records, used only for the balance-change preview.
+  final List<Expense> expenses;
+  final List<Settlement> settlements;
   final String currentUserId;
 
   /// Whether the current user owns the household (owners may moderate).
   final bool isOwner;
 
-  Future<void> _delete(BuildContext context) async {
-    final confirmed = await confirmDestructive(
+  Future<void> _cancel(BuildContext context) async {
+    final decision = await showCancelFinancialDialog(
       context,
-      title: 'Delete expense?',
-      message: 'This cannot be undone.',
+      title: 'Cancel expense?',
+      confirmLabel: 'Cancel expense',
+      currentUserId: currentUserId,
+      currency: expense.currency,
+      changes: cancellationBalanceChanges(
+        expenses: expenses,
+        settlements: settlements,
+        expenseId: expense.id,
+      ),
     );
-    if (!confirmed || !context.mounted) return;
+    if (decision == null || !context.mounted) return;
     try {
-      await ExpenseRepository(supabaseClient).deleteExpense(expense.id);
+      await ExpenseRepository(
+        supabaseClient,
+      ).cancelExpense(expense.id, reason: decision.reason);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e is ExpensePermissionException
-                  ? 'You no longer have permission to delete this expense.'
-                  : 'Failed to delete expense.',
+              _isPermissionError(e)
+                  ? 'You no longer have permission to cancel this expense.'
+                  : 'Failed to cancel expense.',
             ),
           ),
         );
@@ -175,7 +197,7 @@ class ExpenseHistoryRow extends StatelessWidget {
                 ),
                 onSelected: (value) {
                   if (value == 'edit') _editTitle(context);
-                  if (value == 'delete') _delete(context);
+                  if (value == 'delete') _cancel(context);
                 },
                 itemBuilder: (_) => [
                   if (canEdit)
@@ -184,7 +206,10 @@ class ExpenseHistoryRow extends StatelessWidget {
                       child: Text('Edit title'),
                     ),
                   if (canDelete)
-                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Cancel expense'),
+                    ),
                 ],
               )
             else
@@ -207,24 +232,48 @@ class SettlementHistoryRow extends StatelessWidget {
     super.key,
     required this.settlement,
     required this.currentUserId,
+    this.isOwner = false,
+    this.expenses = const [],
+    this.settlements = const [],
   });
 
   final Settlement settlement;
   final String currentUserId;
+  final bool isOwner;
 
-  Future<void> _delete(BuildContext context) async {
-    final confirmed = await confirmDestructive(
+  /// Loaded records, used only for the balance-change preview.
+  final List<Expense> expenses;
+  final List<Settlement> settlements;
+
+  Future<void> _cancel(BuildContext context) async {
+    final decision = await showCancelFinancialDialog(
       context,
-      title: 'Delete payment record?',
-      message: 'This cannot be undone.',
+      title: 'Cancel payment?',
+      confirmLabel: 'Cancel payment',
+      currentUserId: currentUserId,
+      currency: settlement.currency,
+      isExpense: false,
+      changes: cancellationBalanceChanges(
+        expenses: expenses,
+        settlements: settlements,
+        settlementId: settlement.id,
+      ),
     );
-    if (!confirmed || !context.mounted) return;
+    if (decision == null || !context.mounted) return;
     try {
-      await ExpenseRepository(supabaseClient).deleteSettlement(settlement.id);
-    } catch (_) {
+      await ExpenseRepository(
+        supabaseClient,
+      ).cancelSettlement(settlement.id, reason: decision.reason);
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete payment record.')),
+          SnackBar(
+            content: Text(
+              _isPermissionError(e)
+                  ? 'You no longer have permission to cancel this payment.'
+                  : 'Failed to cancel payment.',
+            ),
+          ),
         );
       }
     }
@@ -232,7 +281,11 @@ class SettlementHistoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canDelete = settlement.createdBy == currentUserId;
+    final canDelete = canCancelSettlement(
+      settlement,
+      currentUserId,
+      isOwner: isOwner,
+    );
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final formatted = Money.format(settlement.amountCents, settlement.currency);
@@ -303,10 +356,10 @@ class SettlementHistoryRow extends StatelessWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
                 onSelected: (value) {
-                  if (value == 'delete') _delete(context);
+                  if (value == 'delete') _cancel(context);
                 },
                 itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  PopupMenuItem(value: 'delete', child: Text('Cancel payment')),
                 ],
               ),
           ],

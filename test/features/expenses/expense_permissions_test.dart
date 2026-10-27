@@ -90,32 +90,32 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('creator sees edit and delete', (tester) async {
+    testWidgets('creator sees edit and cancel', (tester) async {
       await _pumpRow(tester, userId: _creator);
       await openMenu(tester);
       expect(find.text('Edit title'), findsOneWidget);
-      expect(find.text('Delete'), findsOneWidget);
+      expect(find.text('Cancel expense'), findsOneWidget);
     });
 
-    testWidgets('payer sees edit and delete', (tester) async {
+    testWidgets('payer sees edit and cancel', (tester) async {
       await _pumpRow(tester, userId: _payer);
       await openMenu(tester);
       expect(find.text('Edit title'), findsOneWidget);
-      expect(find.text('Delete'), findsOneWidget);
+      expect(find.text('Cancel expense'), findsOneWidget);
     });
 
-    testWidgets('owner sees edit and delete', (tester) async {
+    testWidgets('owner sees edit and cancel', (tester) async {
       await _pumpRow(tester, userId: _owner, isOwner: true);
       await openMenu(tester);
       expect(find.text('Edit title'), findsOneWidget);
-      expect(find.text('Delete'), findsOneWidget);
+      expect(find.text('Cancel expense'), findsOneWidget);
     });
 
     testWidgets('participant can only edit the title', (tester) async {
       await _pumpRow(tester, userId: _participant);
       await openMenu(tester);
       expect(find.text('Edit title'), findsOneWidget);
-      expect(find.text('Delete'), findsNothing);
+      expect(find.text('Cancel expense'), findsNothing);
     });
 
     testWidgets('unrelated member sees no actions and the row stays intact', (

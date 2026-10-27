@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/features/expenses/data/expense_repository.dart';
+import 'package:household_os/features/expenses/domain/archived_entry.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/settlement.dart';
 
@@ -25,6 +26,12 @@ final expensesProvider = StreamProvider.autoDispose
 final settlementsProvider = StreamProvider.autoDispose
     .family<List<Settlement>, String>((ref, householdId) {
       return ExpenseRepository(supabaseClient).watchSettlements(householdId);
+    });
+
+/// Cancelled entries; autoDispose cancels the subscription with the screen.
+final archiveProvider = StreamProvider.autoDispose
+    .family<List<ArchivedEntry>, String>((ref, householdId) {
+      return ExpenseRepository(supabaseClient).watchArchive(householdId);
     });
 
 final expenseMembersProvider = FutureProvider.autoDispose

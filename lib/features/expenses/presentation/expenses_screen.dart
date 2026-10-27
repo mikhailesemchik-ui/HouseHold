@@ -15,6 +15,7 @@ import 'package:household_os/features/expenses/domain/settlement.dart';
 import 'package:household_os/features/expenses/presentation/add_expense_screen.dart';
 import 'package:household_os/features/expenses/presentation/expenses_provider.dart';
 import 'package:household_os/features/expenses/presentation/record_settlement_screen.dart';
+import 'package:household_os/features/expenses/presentation/widgets/archive_section.dart';
 import 'package:household_os/features/expenses/presentation/widgets/balance_block.dart';
 import 'package:household_os/features/expenses/presentation/widgets/history_row.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
@@ -212,13 +213,23 @@ class _ExpensesBody extends ConsumerWidget {
                   expense: item,
                   currentUserId: currentUserId,
                   isOwner: isOwner,
+                  expenses: expenses,
+                  settlements: settlements,
                 )
               else
                 SettlementHistoryRow(
                   settlement: item as Settlement,
                   currentUserId: currentUserId,
+                  isOwner: isOwner,
+                  expenses: expenses,
+                  settlements: settlements,
                 ),
           ],
+          ArchiveSection(
+            entries:
+                ref.watch(archiveProvider(householdId)).asData?.value ??
+                const [],
+          ),
         ],
       ),
     );

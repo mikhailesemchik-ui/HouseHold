@@ -26,13 +26,19 @@ CLAIMS="{\"sub\":\"$A\",\"role\":\"authenticated\"}"
 
 cleanup() {
   psql_ <<SQL >/dev/null
+begin;
 delete from expense_settlements where household_id in (select id from households where name = 'IDEM CONC');
 delete from expenses where household_id in (select id from households where name = 'IDEM CONC');
 delete from tasks where household_id in (select id from households where name = 'IDEM CONC');
+alter table financial_archive disable trigger user;
+delete from financial_archive where household_id in (select id from households where name = 'IDEM CONC');
+alter table financial_archive enable trigger user;
+delete from household_events where household_id in (select id from households where name = 'IDEM CONC');
 delete from financial_operations where actor_id in ('$A','$B');
 delete from households where name = 'IDEM CONC';
 delete from profiles where user_id in ('$A','$B');
 delete from auth.users where id in ('$A','$B');
+commit;
 SQL
 }
 trap cleanup EXIT

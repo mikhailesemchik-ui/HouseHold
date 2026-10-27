@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:household_os/features/expenses/domain/archived_entry.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/settlement.dart';
 
@@ -134,6 +135,30 @@ class ExpenseRepository {
 
   Future<void> deleteSettlement(String settlementId) async {
     await _client.from('expense_settlements').delete().eq('id', settlementId);
+  }
+
+  /// Cancels (deletes and archives) an entry; the server records the actor.
+  Future<void> cancelExpense(String expenseId, {String? reason}) async {
+    await _client.rpc(
+      'cancel_expense',
+      params: {'p_expense_id': expenseId, 'p_reason': reason},
+    );
+  }
+
+  Future<void> cancelSettlement(String settlementId, {String? reason}) async {
+    await _client.rpc(
+      'cancel_settlement',
+      params: {'p_settlement_id': settlementId, 'p_reason': reason},
+    );
+  }
+
+  Stream<List<ArchivedEntry>> watchArchive(String householdId) {
+    return _client
+        .from('financial_archive')
+        .stream(primaryKey: ['id'])
+        .eq('household_id', householdId)
+        .order('canceled_at', ascending: false)
+        .map((rows) => rows.map(ArchivedEntry.fromMap).toList());
   }
 
   /// An update or delete that matched no row was filtered out by RLS.
