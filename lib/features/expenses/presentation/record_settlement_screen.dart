@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/theme/app_theme.dart';
-import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_empty_state.dart';
@@ -9,10 +8,10 @@ import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_keyboard_dismiss.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
-import 'package:household_os/features/expenses/data/expense_repository.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/presentation/amount_input.dart';
 import 'package:household_os/features/expenses/presentation/expenses_provider.dart';
+import 'package:household_os/features/expenses/presentation/financial_submission.dart';
 import 'package:household_os/features/expenses/presentation/widgets/member_option.dart';
 
 /// Full-screen "record a repayment" form — replaces `_RecordSettlementDialog`
@@ -115,27 +114,42 @@ class _SettlementFormScreenState extends ConsumerState<SettlementFormScreen> {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
 
-    try {
-      await ExpenseRepository(supabaseClient).createSettlement(
-        householdId: widget.householdId,
-        fromUserId: fromId!,
-        toUserId: toId!,
-        amountCents: amountCents!,
-        currency: 'EUR',
-        note: _noteController.text.trim().isEmpty
-            ? null
-            : _noteController.text.trim(),
-      );
-      if (mounted) Navigator.of(context).pop();
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to record payment. Please try again.'),
+    final note = _noteController.text.trim().isEmpty
+        ? null
+        : _noteController.text.trim();
+    // The request id is reused for a retry of the same details, so a retry
+    // cannot record the payment twice.
+    final accepted = await FinancialSubmission.run(
+      context: context,
+      ref: ref,
+      kind: 'settlement',
+      householdId: widget.householdId,
+      payloadParts: [
+        widget.householdId,
+        fromId!,
+        toId!,
+        '$amountCents',
+        'EUR',
+        note ?? '',
+      ],
+      failureMessage: 'Failed to record payment. Please try again.',
+      send: (requestId) => ref
+          .read(expenseRepositoryProvider)
+          .createSettlement(
+            householdId: widget.householdId,
+            fromUserId: fromId,
+            toUserId: toId,
+            amountCents: amountCents!,
+            currency: 'EUR',
+            note: note,
+            requestId: requestId,
           ),
-        );
-      }
+    );
+    if (!mounted) return;
+    if (accepted) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _isSubmitting = false);
     }
   }
 

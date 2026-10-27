@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/theme/app_theme.dart';
-import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
@@ -14,6 +13,7 @@ import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/money.dart';
 import 'package:household_os/features/expenses/presentation/amount_input.dart';
 import 'package:household_os/features/expenses/presentation/expenses_provider.dart';
+import 'package:household_os/features/expenses/presentation/financial_submission.dart';
 import 'package:household_os/features/expenses/presentation/widgets/member_option.dart';
 
 /// Full-screen expense create form — the old `AddExpenseDialog` `AlertDialog`
@@ -127,28 +127,42 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
 
-    try {
-      await ExpenseRepository(supabaseClient).createEqualSplitExpense(
-        householdId: widget.householdId,
-        title: _titleController.text,
-        amountCents: amountCents!,
-        currency: 'EUR',
-        paidBy: _selectedPayerId!,
-        participantIds: _selectedParticipantIds.toList(),
-      );
-      if (mounted) Navigator.of(context).pop();
-    } catch (_) {
-      // Amount, title, payer, and participants are left exactly as entered —
-      // a network failure is a form-level, recoverable message, never a
-      // reason to discard what the user typed.
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to add expense. Please try again.'),
+    // Amount, title, payer and participants stay exactly as entered on
+    // failure: a network problem is recoverable and never a reason to discard
+    // what the user typed. The request id is reused for a retry of the same
+    // details, so a retry cannot record the expense twice.
+    final participantIds = _selectedParticipantIds.toList();
+    final accepted = await FinancialSubmission.run(
+      context: context,
+      ref: ref,
+      kind: 'expense',
+      householdId: widget.householdId,
+      payloadParts: [
+        widget.householdId,
+        _titleController.text.trim(),
+        '$amountCents',
+        'EUR',
+        _selectedPayerId!,
+        ...(List.of(participantIds)..sort()),
+      ],
+      failureMessage: 'Failed to add expense. Please try again.',
+      send: (requestId) => ref
+          .read(expenseRepositoryProvider)
+          .createEqualSplitExpense(
+            householdId: widget.householdId,
+            title: _titleController.text,
+            amountCents: amountCents!,
+            currency: 'EUR',
+            paidBy: _selectedPayerId!,
+            participantIds: participantIds,
+            requestId: requestId,
           ),
-        );
-      }
+    );
+    if (!mounted) return;
+    if (accepted) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _isSubmitting = false);
     }
   }
 

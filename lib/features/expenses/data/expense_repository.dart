@@ -54,6 +54,7 @@ class ExpenseRepository {
     required String currency,
     required String paidBy,
     required List<String> participantIds,
+    String? requestId,
   }) async {
     await _client.rpc(
       'create_equal_split_expense',
@@ -64,6 +65,7 @@ class ExpenseRepository {
         'p_currency': currency,
         'p_paid_by': paidBy,
         'p_participant_ids': participantIds,
+        'p_request_id': ?requestId,
       },
     );
   }
@@ -114,6 +116,7 @@ class ExpenseRepository {
     required int amountCents,
     required String currency,
     String? note,
+    String? requestId,
   }) async {
     await _client.rpc(
       'create_settlement',
@@ -124,6 +127,7 @@ class ExpenseRepository {
         'p_amount_cents': amountCents,
         'p_currency': currency,
         'p_note': note,
+        'p_request_id': ?requestId,
       },
     );
   }

@@ -11,6 +11,10 @@ final currentUserIdProvider = Provider<String>((ref) {
   return id ?? '';
 });
 
+final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
+  return ExpenseRepository(supabaseClient);
+});
+
 /// autoDispose cancels the subscription when the screen is left.
 final expensesProvider = StreamProvider.autoDispose
     .family<List<Expense>, String>((ref, householdId) {
