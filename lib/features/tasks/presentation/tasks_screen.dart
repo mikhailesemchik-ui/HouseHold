@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/theme/app_shell_metrics.dart';
+import 'package:household_os/core/services/recurring_occurrence_refresher.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_back_button.dart';
@@ -40,14 +41,26 @@ TasksLoadState resolveTasksLoadState(
   return TasksLoadState.ready;
 }
 
-class TasksScreen extends ConsumerWidget {
+class TasksScreen extends ConsumerStatefulWidget {
   const TasksScreen({super.key, required this.householdId});
 
   final String householdId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(body: _TasksBody(householdId: householdId));
+  ConsumerState<TasksScreen> createState() => _TasksScreenState();
+}
+
+class _TasksScreenState extends ConsumerState<TasksScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Extends the recurring window; new rows arrive via the occurrences stream.
+    ref.read(recurringOccurrenceRefresherProvider).refresh().ignore();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(body: _TasksBody(householdId: widget.householdId));
   }
 }
 
@@ -72,6 +85,8 @@ class _TasksBody extends ConsumerWidget {
     const header = AppScreenHeader(
       leading: Center(child: AppBackButton()),
       title: 'Tasks',
+      centerTitle: true,
+      compactTitle: true,
     );
 
     switch (resolveTasksLoadState(tasksAsync, occurrencesAsync)) {

@@ -11,6 +11,7 @@ import 'package:household_os/features/tasks/domain/task_member.dart';
 import 'package:household_os/features/tasks/domain/task_occurrence.dart';
 import 'package:household_os/features/tasks/presentation/tasks_provider.dart';
 import 'package:household_os/features/tasks/presentation/tasks_screen.dart';
+import 'package:household_os/core/widgets/app_screen_header.dart';
 
 void main() {
   final now = DateTime(2026, 8, 25, 12);
@@ -64,6 +65,22 @@ void main() {
             ),
     );
   }
+
+  testWidgets('Tasks header title is centred on the full width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(buildScreen(tasksStream: const Stream.empty()));
+    await tester.pump();
+
+    final title = find.descendant(
+      of: find.byType(AppScreenHeader),
+      matching: find.text('Tasks'),
+    );
+    expect(tester.getCenter(title).dx, closeTo(180, 1));
+    expect(tester.takeException(), isNull);
+  });
 
   group('Task.fromMap', () {
     test('parses an incomplete task', () {

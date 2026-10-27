@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:household_os/core/services/recurring_occurrence_refresher.dart';
 import 'package:household_os/features/homes/domain/household.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
 import 'package:household_os/features/tasks/presentation/tasks_provider.dart';
@@ -49,6 +50,8 @@ class _MembershipWatcherState extends ConsumerState<MembershipWatcher>
     if (state != AppLifecycleState.resumed) return;
     final homes = ref.read(homesProvider).asData?.value;
     if (homes == null) return;
+    // New occurrences reach open Tasks screens through realtime.
+    ref.read(recurringOccurrenceRefresherProvider).refresh().ignore();
     // Screens currently watching these refetch in place; unwatched caches are
     // dropped and refetch on next open.
     ref.invalidate(homesProvider);

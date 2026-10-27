@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/core/services/notification_service.dart';
 import 'package:household_os/core/services/reminder_coordinator.dart';
+import 'package:household_os/core/services/recurring_occurrence_refresher.dart';
 import 'package:household_os/core/services/reminder_settings.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/services/widget_snapshot.dart';
@@ -10,12 +11,6 @@ import 'package:household_os/features/homes/presentation/homes_provider.dart';
 import 'package:household_os/features/tasks/domain/recurrence_type.dart';
 import 'package:household_os/features/today/data/today_repository.dart';
 import 'package:household_os/features/today/domain/today_entry.dart';
-
-/// Triggers the server-side occurrence horizon refresh once per app session.
-/// Non-autoDispose so a second Today load reuses the cached result.
-final _refreshRecurringProvider = FutureProvider<void>((ref) async {
-  await TodayRepository(supabaseClient).refreshRecurringOccurrences();
-});
 
 /// Groups [entries] into dashboard sections using [now]'s local day boundaries.
 ///
@@ -150,7 +145,7 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
     _householdNames = {for (final h in households) h.id: h.name};
 
     // Fire-and-forget; failure does not erase displayed data.
-    ref.read(_refreshRecurringProvider.future).ignore();
+    ref.read(recurringOccurrenceRefresherProvider).refresh().ignore();
 
     final repo = TodayRepository(supabaseClient);
 
