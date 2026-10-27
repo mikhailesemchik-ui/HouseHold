@@ -14,3 +14,17 @@ int? parseAmountInput(String input, TargetPlatform platform) {
       : input;
   return Money.parseAmountCents(text);
 }
+
+/// The validation message for an amount field, or null when the text is a
+/// valid amount. Distinguishes malformed input from an amount above the
+/// per-operation limit so the user knows what to fix.
+String? amountInputError(String input, TargetPlatform platform) {
+  if (parseAmountInput(input, platform) != null) return null;
+  final text = platform == TargetPlatform.iOS
+      ? input.replaceAll(',', '.')
+      : input;
+  if (Money.exceedsMaximum(text)) {
+    return 'The amount cannot exceed €1,000,000.00';
+  }
+  return 'Enter a valid amount (e.g. 12.50)';
+}

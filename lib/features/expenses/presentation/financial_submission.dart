@@ -128,6 +128,10 @@ class FinancialSubmission {
         'This was already recorded and has since been removed.',
       FinancialSubmitOutcome.keyReused =>
         'This entry was already used with different details. Please try again.',
+      FinancialSubmitOutcome.currencyMismatch =>
+        "This entry's currency does not match the household currency.",
+      FinancialSubmitOutcome.amountTooLarge =>
+        'The amount cannot exceed €1,000,000.00',
       _ => failure,
     };
   }

@@ -106,9 +106,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       _amountController.text,
       Theme.of(context).platform,
     );
-    final amountError = amountCents == null
-        ? 'Enter a valid amount (e.g. 12.50)'
-        : null;
+    final amountError = amountInputError(
+      _amountController.text,
+      Theme.of(context).platform,
+    );
     final participantsError = _selectedParticipantIds.isEmpty
         ? 'Select at least one participant.'
         : null;

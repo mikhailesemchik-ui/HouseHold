@@ -10,34 +10,48 @@ abstract final class Money {
     return '$symbol$whole.$fraction';
   }
 
+  /// Largest amount of a single operation, in cents (1,000,000.00). Inclusive.
+  /// The database enforces the same limit.
+  static const int maxCents = 100000000;
+
+  static final _digits = RegExp(r'^[0-9]+$');
+
   /// Parses a decimal string into integer cents.
   /// Accepts: "82", "82.4", "82.40".
-  /// Returns null for empty, zero, negative, or malformed input.
-  /// Rejects more than 2 decimal places to avoid silent rounding.
-  static int? parseAmountCents(String input) {
+  /// Returns null for empty, zero, negative, malformed or oversized input
+  /// (more than [maxCents]). Rejects more than 2 decimal places to avoid
+  /// silent rounding. Never overflows: the size is decided from the digit
+  /// count before any multiplication happens.
+  static int? parseAmountCents(String input) => _parse(input).cents;
+
+  /// Whether [input] is a well-formed amount that is larger than [maxCents].
+  static bool exceedsMaximum(String input) => _parse(input).tooLarge;
+
+  static ({int? cents, bool tooLarge}) _parse(String input) {
+    const invalid = (cents: null, tooLarge: false);
     final trimmed = input.trim();
-    if (trimmed.isEmpty) return null;
+    if (trimmed.isEmpty) return invalid;
 
     final parts = trimmed.split('.');
-    if (parts.length > 2) return null;
+    if (parts.length > 2) return invalid;
 
     final wholePart = parts[0];
     final fracPart = parts.length == 2 ? parts[1] : '';
 
-    if (wholePart.isEmpty) return null;
-    if (fracPart.length > 2) return null;
+    if (!_digits.hasMatch(wholePart)) return invalid;
+    if (fracPart.isNotEmpty && !_digits.hasMatch(fracPart)) return invalid;
+    if (fracPart.length > 2) return invalid;
 
-    final wholeInt = int.tryParse(wholePart);
-    if (wholeInt == null || wholeInt < 0) return null;
+    // maxCents has 7 whole-unit digits (1,000,000), so anything longer is too
+    // large no matter what follows; shorter values are safe to multiply.
+    final significant = wholePart.replaceFirst(RegExp(r'^0+'), '');
+    if (significant.length > 7) return (cents: null, tooLarge: true);
 
-    final fracStr = fracPart.padRight(2, '0');
-    final fracInt = int.tryParse(fracStr);
-    if (fracInt == null) return null;
-
-    final cents = wholeInt * 100 + fracInt;
-    if (cents <= 0) return null;
-
-    return cents;
+    final whole = significant.isEmpty ? 0 : int.parse(significant);
+    final cents = whole * 100 + int.parse(fracPart.padRight(2, '0'));
+    if (cents <= 0) return invalid;
+    if (cents > maxCents) return (cents: null, tooLarge: true);
+    return (cents: cents, tooLarge: false);
   }
 
   /// Calculates equal share amounts for [participantCount] participants.

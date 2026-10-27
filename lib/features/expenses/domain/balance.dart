@@ -41,6 +41,21 @@ class PairwiseDebt {
 /// For expenses: payer receives full credit; each participant is debited their share.
 /// For settlements: from_user paid to_user, so from_user gains credit and to_user
 /// loses credit by the same amount.
+/// The one currency balances are computed in. Households have no currency
+/// picker yet, so every balance is in this currency.
+const householdCurrency = 'EUR';
+
+/// Whether any record is in a currency other than [currency]. Cents of
+/// different currencies must never be added together, so callers that find
+/// such a record must not present a combined balance.
+bool hasForeignCurrency(
+  Iterable<Expense> expenses,
+  Iterable<Settlement> settlements, {
+  String currency = householdCurrency,
+}) =>
+    expenses.any((e) => e.currency != currency) ||
+    settlements.any((s) => s.currency != currency);
+
 Map<String, MemberBalance> calculateNetBalances(
   List<Expense> expenses,
   List<Settlement> settlements,

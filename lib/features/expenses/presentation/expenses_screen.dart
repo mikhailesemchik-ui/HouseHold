@@ -8,6 +8,7 @@ import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
 import 'package:household_os/core/widgets/app_pressable_scale.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
+import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/features/expenses/domain/balance.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/settlement.dart';
@@ -154,7 +155,12 @@ class _ExpensesBody extends ConsumerWidget {
 
     final expenses = expensesAsync.requireValue;
     final settlements = settlementsAsync.requireValue;
-    final debts = simplifyDebts(calculateNetBalances(expenses, settlements));
+    // Legacy records in another currency are kept and listed, but never added
+    // into a balance.
+    final foreignCurrency = hasForeignCurrency(expenses, settlements);
+    final debts = foreignCurrency
+        ? const <PairwiseDebt>[]
+        : simplifyDebts(calculateNetBalances(expenses, settlements));
     final items = _mergedHistory(expenses, settlements);
     // Owners may moderate; until the member list loads nobody is treated as one.
     final isOwner =
@@ -175,7 +181,10 @@ class _ExpensesBody extends ConsumerWidget {
         ),
         children: [
           header,
-          BalanceBlock(debts: debts, currentUserId: currentUserId),
+          if (foreignCurrency)
+            const _MixedCurrencyNotice()
+          else
+            BalanceBlock(debts: debts, currentUserId: currentUserId),
           _ExpenseActions(
             onAddExpense: onAddExpense,
             onRecordSettlement: onRecordSettlement,
@@ -315,4 +324,28 @@ List<Object> _mergedHistory(
     return bId.compareTo(aId);
   });
   return items;
+}
+
+/// Shown instead of the balance when older entries use another currency.
+class _MixedCurrencyNotice extends StatelessWidget {
+  const _MixedCurrencyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.base,
+        0,
+        AppSpacing.base,
+        AppSpacing.sm,
+      ),
+      child: AppSoftCard(
+        child: Text(
+          'Some earlier entries use a different currency, so a combined '
+          'balance cannot be shown. Your history is unchanged.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
+    );
+  }
 }
