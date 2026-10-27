@@ -54,3 +54,35 @@ app.*.map.json
 
 # Working screenshot captures — only docs/screenshots/portfolio/ is tracked
 /docs/screenshots/raw/
+
+# macOS metadata (AppleDouble, Finder)
+._*
+.DS_Store
+
+# Local environment and secrets
+defines*.json
+.env.keys
+**/GoogleService-Info.plist
+
+# Private signing material
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+*.jks
+*.keystore
+key.properties
+
+# Local database exports
+*.dump
+*.sql.gz
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Local Supabase CLI state (linked project, pinned versions)
+/supabase/.temp/
+
+# Local-only reference images (third-party or private captures)
+/docs/new_design/telegram_glass/
+/docs/new_design/ChatGPT Image Sep 11, 2026, 12_37_56 PM (1).png
