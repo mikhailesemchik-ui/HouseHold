@@ -6,7 +6,8 @@
 -- "Time passing" is simulated by anchoring tasks in the past (now() is fixed
 -- inside a transaction). Everything is rolled back.
 -- Time zone: slots are timestamptz + interval in the SESSION time zone (UTC on
--- Supabase), so the DST scenarios pin that existing behavior, they do not change it.
+-- Supabase). Since 20261027000001 the recurrence functions pin timezone to UTC, so the
+-- session zone no longer matters; the DST scenarios assert exactly that.
 -- ============================================================
 
 BEGIN;
@@ -211,15 +212,16 @@ DECLARE
 BEGIN
   INSERT INTO households (id, name, created_by) VALUES (v_hh, 'Dst HH', v_user);
 
-  -- Session zone America/New_York: interval arithmetic keeps local 09:00 across 2027-03-14.
+  -- Session zone America/New_York is ignored: slots stay a constant UTC time of day
+  -- (2027-03-01 09:00 EST = 14:00 UTC) across the 2027-03-14 spring-forward.
   SET LOCAL TIME ZONE 'America/New_York';
   v_anchor := timestamptz '2027-03-01 09:00';
   INSERT INTO tasks (household_id, title, created_by, assigned_to, due_at, recurrence_type)
   VALUES (v_hh, 'DST-NY', v_user, v_user, v_anchor, 'daily') RETURNING id INTO v_task;
-  PERFORM pg_temp.check('DST1 NY session: local 09:00 on every original slot over spring-forward',
-    (SELECT count(*) FROM task_occurrences WHERE task_id = v_task
-       AND scheduled_at <= v_anchor + interval '29 days'
-       AND scheduled_at::time = time '09:00') = 30);
+  PERFORM pg_temp.check('DST1 NY session ignored: constant 14:00 UTC over spring-forward',
+    (SELECT count(*) = 30 AND count(*) FILTER (
+              WHERE (scheduled_at AT TIME ZONE 'UTC')::time = time '14:00') = 30
+       FROM task_occurrences WHERE task_id = v_task));
 
   -- Session zone UTC (Supabase): slots are exactly 24h apart, so the UTC time is constant
   -- and New York wall-clock shifts by an hour at the transition. Pre-existing behavior.
@@ -232,15 +234,15 @@ BEGIN
        AND scheduled_at <= v_anchor + interval '29 days'
        AND scheduled_at::time = time '14:00') = 30);
 
-  -- Rolling window in a DST session zone: first upcoming slot is exact, local 09:00 kept.
+  -- Rolling window under a DST session zone: first upcoming slot is exact, one UTC time of day.
   SET LOCAL TIME ZONE 'America/New_York';
   v_anchor := date_trunc('day', now()) - interval '40 days' + interval '9 hours';
   INSERT INTO tasks (household_id, title, created_by, assigned_to, due_at, recurrence_type)
   VALUES (v_hh, 'DST-ROLL', v_user, v_user, v_anchor, 'daily') RETURNING id INTO v_task;
-  PERFORM pg_temp.check('DST3 NY session rolling window: 30 upcoming, local 09:00, exact start',
+  PERFORM pg_temp.check('DST3 NY session rolling window: 30 upcoming, one UTC time of day, exact start',
     (SELECT count(*) FILTER (WHERE scheduled_at >= now()) = 30
         AND min(scheduled_at) FILTER (WHERE scheduled_at >= now()) - interval '1 day' < now()
-        AND count(*) FILTER (WHERE scheduled_at::time = time '09:00') = count(*)
+        AND count(DISTINCT (scheduled_at AT TIME ZONE 'UTC')::time) = 1
        FROM task_occurrences WHERE task_id = v_task));
 END $$;
 
