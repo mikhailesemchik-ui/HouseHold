@@ -38,6 +38,15 @@ class HomesNotifier extends AsyncNotifier<List<Household>> {
     return household;
   }
 
+  Future<void> deleteHousehold(String householdId) async {
+    await _repo.deleteHousehold(householdId);
+    final current = switch (state) {
+      AsyncData(:final value) => value,
+      _ => <Household>[],
+    };
+    state = AsyncData(current.where((h) => h.id != householdId).toList());
+  }
+
   Future<void> leaveHousehold(String householdId) async {
     await _repo.leaveHousehold(householdId);
     final current = switch (state) {

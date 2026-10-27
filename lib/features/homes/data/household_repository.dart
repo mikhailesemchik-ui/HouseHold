@@ -61,6 +61,14 @@ class HouseholdRepository {
     );
   }
 
+  /// Owner-only, permanent: removes the household and all its data.
+  Future<void> deleteHousehold(String householdId) async {
+    await _client.rpc(
+      'delete_household',
+      params: {'p_household_id': householdId},
+    );
+  }
+
   Future<void> removeMember({
     required String householdId,
     required String userId,

@@ -23,6 +23,7 @@ import 'package:household_os/features/homes/data/household_repository.dart';
 import 'package:household_os/features/homes/domain/household_event.dart';
 import 'package:household_os/features/homes/domain/household_invite.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
+import 'package:household_os/features/homes/presentation/widgets/delete_household_dialog.dart';
 import 'package:household_os/features/tasks/presentation/tasks_provider.dart';
 
 /// household_events event_types that mean membership itself changed, as
@@ -127,6 +128,24 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
     }
   }
 
+  Future<void> _deleteHousehold(String householdName) async {
+    final deleted = await showDeleteHouseholdDialog(
+      context,
+      householdName: householdName,
+      onDelete: () =>
+          ref.read(homesProvider.notifier).deleteHousehold(widget.householdId),
+      errorMessage: _deleteErrorMessage,
+    );
+    if (deleted && mounted) context.go('/homes');
+  }
+
+  static String _deleteErrorMessage(Object error) {
+    if (error is PostgrestException && error.code == 'HD002') {
+      return 'Only the owner can delete this home.';
+    }
+    return 'Failed to delete home. Please try again.';
+  }
+
   static bool _isOnlyOwnerError(PostgrestException e) {
     final code = e.code ?? '';
     final msg = e.message.toLowerCase();
@@ -136,6 +155,7 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final householdAsync = ref.watch(householdByIdProvider(widget.householdId));
+    final householdName = householdAsync.asData?.value?.name;
     final summaryAsync = ref.watch(
       householdSummaryProvider(widget.householdId),
     );
@@ -263,12 +283,20 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
                           icon: const Icon(Icons.more_vert_rounded),
                           onSelected: (value) {
                             if (value == 'leave') _leaveHousehold();
+                            if (value == 'delete' && householdName != null) {
+                              _deleteHousehold(householdName);
+                            }
                           },
-                          itemBuilder: (_) => const [
-                            PopupMenuItem(
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
                               value: 'leave',
                               child: Text('Leave home'),
                             ),
+                            if (isOwner && householdName != null)
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete home'),
+                              ),
                           ],
                         ),
                       ),
