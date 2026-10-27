@@ -16,6 +16,7 @@ import 'package:household_os/features/expenses/presentation/expenses_provider.da
 import 'package:household_os/features/expenses/presentation/record_settlement_screen.dart';
 import 'package:household_os/features/expenses/presentation/widgets/balance_block.dart';
 import 'package:household_os/features/expenses/presentation/widgets/history_row.dart';
+import 'package:household_os/features/homes/presentation/homes_provider.dart';
 
 /// One coherent financial surface: balance state → primary/secondary actions
 /// → merged chronological history. Answers "are we settled, who owes whom,
@@ -155,6 +156,14 @@ class _ExpensesBody extends ConsumerWidget {
     final settlements = settlementsAsync.requireValue;
     final debts = simplifyDebts(calculateNetBalances(expenses, settlements));
     final items = _mergedHistory(expenses, settlements);
+    // Owners may moderate; until the member list loads nobody is treated as one.
+    final isOwner =
+        ref
+            .watch(householdMembersProvider(householdId))
+            .asData
+            ?.value
+            .any((m) => m.userId == currentUserId && m.role == 'owner') ??
+        false;
 
     return SafeArea(
       top: false,
@@ -190,7 +199,11 @@ class _ExpensesBody extends ConsumerWidget {
             ),
             for (final item in items)
               if (item is Expense)
-                ExpenseHistoryRow(expense: item, currentUserId: currentUserId)
+                ExpenseHistoryRow(
+                  expense: item,
+                  currentUserId: currentUserId,
+                  isOwner: isOwner,
+                )
               else
                 SettlementHistoryRow(
                   settlement: item as Settlement,

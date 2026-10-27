@@ -6,6 +6,7 @@ import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/expenses/data/expense_repository.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
+import 'package:household_os/features/expenses/domain/expense_permissions.dart';
 import 'package:household_os/features/expenses/domain/money.dart';
 import 'package:household_os/features/expenses/domain/settlement.dart';
 
@@ -52,10 +53,14 @@ class ExpenseHistoryRow extends StatelessWidget {
     super.key,
     required this.expense,
     required this.currentUserId,
+    this.isOwner = false,
   });
 
   final Expense expense;
   final String currentUserId;
+
+  /// Whether the current user owns the household (owners may moderate).
+  final bool isOwner;
 
   Future<void> _delete(BuildContext context) async {
     final confirmed = await confirmDestructive(
@@ -66,10 +71,16 @@ class ExpenseHistoryRow extends StatelessWidget {
     if (!confirmed || !context.mounted) return;
     try {
       await ExpenseRepository(supabaseClient).deleteExpense(expense.id);
-    } catch (_) {
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete expense.')),
+          SnackBar(
+            content: Text(
+              e is ExpensePermissionException
+                  ? 'You no longer have permission to delete this expense.'
+                  : 'Failed to delete expense.',
+            ),
+          ),
         );
       }
     }
@@ -87,6 +98,16 @@ class ExpenseHistoryRow extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final formatted = Money.format(expense.amountCents, expense.currency);
+    final canEdit = canEditExpenseTitle(
+      expense,
+      currentUserId,
+      isOwner: isOwner,
+    );
+    final canDelete = canDeleteExpense(
+      expense,
+      currentUserId,
+      isOwner: isOwner,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -145,21 +166,29 @@ class ExpenseHistoryRow extends StatelessWidget {
                 ),
               ),
             ),
-            PopupMenuButton<String>(
-              tooltip: 'Expense actions',
-              icon: Icon(
-                Icons.more_vert_rounded,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              onSelected: (value) {
-                if (value == 'edit') _editTitle(context);
-                if (value == 'delete') _delete(context);
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit title')),
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
-            ),
+            if (canEdit || canDelete)
+              PopupMenuButton<String>(
+                tooltip: 'Expense actions',
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                onSelected: (value) {
+                  if (value == 'edit') _editTitle(context);
+                  if (value == 'delete') _delete(context);
+                },
+                itemBuilder: (_) => [
+                  if (canEdit)
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Text('Edit title'),
+                    ),
+                  if (canDelete)
+                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              )
+            else
+              const SizedBox(width: 48),
           ],
         ),
       ),
@@ -335,10 +364,16 @@ class _EditExpenseTitleDialogState extends State<_EditExpenseTitleDialog> {
         supabaseClient,
       ).updateExpenseTitle(expenseId: widget.expense.id, title: title);
       if (mounted) Navigator.of(context).pop();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update expense.')),
+          SnackBar(
+            content: Text(
+              e is ExpensePermissionException
+                  ? 'You no longer have permission to edit this expense.'
+                  : 'Failed to update expense.',
+            ),
+          ),
         );
       }
     } finally {

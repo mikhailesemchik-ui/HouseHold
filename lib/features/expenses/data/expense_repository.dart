@@ -2,6 +2,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/settlement.dart';
 
+/// Raised when an update or delete matched no row: RLS filters rows the user
+/// may not change instead of raising an error, so a silent no-op means the
+/// caller lost (or never had) permission.
+class ExpensePermissionException implements Exception {
+  const ExpensePermissionException();
+
+  @override
+  String toString() => 'ExpensePermissionException';
+}
+
 class ExpenseRepository {
   const ExpenseRepository(this._client);
 
@@ -62,14 +72,21 @@ class ExpenseRepository {
     required String expenseId,
     required String title,
   }) async {
-    await _client
+    final rows = await _client
         .from('expenses')
         .update({'title': title.trim()})
-        .eq('id', expenseId);
+        .eq('id', expenseId)
+        .select('id');
+    ensureAffected(rows);
   }
 
   Future<void> deleteExpense(String expenseId) async {
-    await _client.from('expenses').delete().eq('id', expenseId);
+    final rows = await _client
+        .from('expenses')
+        .delete()
+        .eq('id', expenseId)
+        .select('id');
+    ensureAffected(rows);
   }
 
   Future<List<ExpenseMember>> fetchMembers(String householdId) async {
@@ -113,6 +130,11 @@ class ExpenseRepository {
 
   Future<void> deleteSettlement(String settlementId) async {
     await _client.from('expense_settlements').delete().eq('id', settlementId);
+  }
+
+  /// An update or delete that matched no row was filtered out by RLS.
+  static void ensureAffected(List<dynamic> rows) {
+    if (rows.isEmpty) throw const ExpensePermissionException();
   }
 
   static String? validateTitle(String title) {
