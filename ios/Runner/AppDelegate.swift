@@ -3,7 +3,7 @@ import UIKit
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
     private var apnsToken: String?
     private var pendingLaunchPayload: [String: Any?]?
     private var pushNotifChannel: FlutterMethodChannel?
@@ -12,35 +12,6 @@ import UserNotifications
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        GeneratedPluginRegistrant.register(with: self)
-
-        if let controller = window?.rootViewController as? FlutterViewController {
-            FlutterMethodChannel(
-                name: "household_os/push_token",
-                binaryMessenger: controller.binaryMessenger
-            ).setMethodCallHandler { [weak self] call, result in
-                if call.method == "getPushToken" {
-                    result(self?.apnsToken)
-                } else {
-                    result(FlutterMethodNotImplemented)
-                }
-            }
-
-            let notifChannel = FlutterMethodChannel(
-                name: "household_os/push_notifications",
-                binaryMessenger: controller.binaryMessenger
-            )
-            pushNotifChannel = notifChannel
-            notifChannel.setMethodCallHandler { [weak self] call, result in
-                if call.method == "getLaunchPayload" {
-                    result(self?.pendingLaunchPayload)
-                    self?.pendingLaunchPayload = nil
-                } else {
-                    result(FlutterMethodNotImplemented)
-                }
-            }
-        }
-
         UNUserNotificationCenter.current().delegate = self
         application.registerForRemoteNotifications()
 
@@ -50,6 +21,36 @@ import UserNotifications
         }
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+
+    func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+        GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+        let messenger = engineBridge.applicationRegistrar.messenger()
+        FlutterMethodChannel(
+            name: "household_os/push_token",
+            binaryMessenger: messenger
+        ).setMethodCallHandler { [weak self] call, result in
+            if call.method == "getPushToken" {
+                result(self?.apnsToken)
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
+
+        let notifChannel = FlutterMethodChannel(
+            name: "household_os/push_notifications",
+            binaryMessenger: messenger
+        )
+        pushNotifChannel = notifChannel
+        notifChannel.setMethodCallHandler { [weak self] call, result in
+            if call.method == "getLaunchPayload" {
+                result(self?.pendingLaunchPayload)
+                self?.pendingLaunchPayload = nil
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
     }
 
     override func application(
