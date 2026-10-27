@@ -1,5 +1,5 @@
 -- ============================================================
--- Settlement authorization tests (migration 20261028000001, finding F3)
+-- Settlement authorization tests (migrations 20261028000001 and 20261028000002, finding F3)
 -- Usage: docker exec -i <local db container> psql -U postgres -v ON_ERROR_STOP=1 -d postgres \
 --          < supabase/tests/settlement_authorization.sql
 -- A failed check RAISEs an EXCEPTION; with ON_ERROR_STOP=1 psql exits nonzero.
@@ -122,8 +122,13 @@ BEGIN
   PERFORM pg_temp.as_user(a);
   PERFORM pg_temp.check('active a records a payment from former member c',
     pg_temp.outcome(format($q$select create_settlement(%L,%L,%L,200,'EUR')$q$, h1,c,a)) = 'ok');
-  PERFORM pg_temp.check('active a records a payment to former member c',
-    pg_temp.outcome(format($q$select create_settlement(%L,%L,%L,100,'EUR')$q$, h1,a,c)) = 'ok');
+  -- interim rule (20261028000002): an active sender may NOT claim a payment to a former member,
+  -- because that member can neither see nor dispute it
+  SELECT count(*) INTO n_before FROM expense_settlements WHERE household_id = h1;
+  s := pg_temp.outcome(format($q$select create_settlement(%L,%L,%L,100,'EUR')$q$, h1,a,c));
+  PERFORM pg_temp.check('active sender a cannot claim a payment to former member c',
+    s <> 'ok' AND (SELECT count(*) FROM expense_settlements WHERE household_id = h1) = n_before, 'sqlstate='||s);
+  PERFORM pg_temp.check('owner a gets no bypass for a payment to a former member', s <> 'ok');
   -- a former member cannot initiate
   PERFORM pg_temp.as_user(c);
   s := pg_temp.outcome(format($q$select create_settlement(%L,%L,%L,100,'EUR')$q$, h1,c,a));
