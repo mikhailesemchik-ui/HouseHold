@@ -118,10 +118,8 @@ void main() {
                 ),
               );
               await tester.pumpAndSettle();
-              await tester.scrollUntilVisible(
-                find.text('Show task names'),
-                300,
-              );
+              // The Account group (Delete account) is now the last row.
+              await tester.scrollUntilVisible(find.text('Delete account'), 300);
               await tester.drag(find.byType(ListView), const Offset(0, -2000));
               await tester.pumpAndSettle();
 
@@ -133,7 +131,7 @@ void main() {
                   )
                   .top;
               final rowBottom = tester
-                  .getRect(find.byType(SwitchListTile).last)
+                  .getRect(find.byType(ListTile).last)
                   .bottom;
               expect(
                 navTop - rowBottom,

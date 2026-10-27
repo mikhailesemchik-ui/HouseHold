@@ -20,6 +20,7 @@ import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/profile/data/profile_repository.dart';
 import 'package:household_os/features/profile/domain/profile.dart';
 import 'package:household_os/features/profile/domain/profile_validation.dart';
+import 'package:household_os/features/profile/presentation/delete_account_flow.dart';
 import 'package:household_os/features/profile/presentation/profile_provider.dart';
 import 'package:household_os/features/today/presentation/today_provider.dart';
 
@@ -533,6 +534,42 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
                   ],
                 )
               : const _SettingsGroupCard(rows: [_SettingsGroupLoadingRow()]),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        // ── Account group ────────────────────────────────────────────────────
+        const AppSectionHeader(label: 'Account'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+          child: _SettingsGroupCard(
+            rows: [
+              ListTile(
+                leading: AppIconChip(
+                  icon: Icons.delete_forever_rounded,
+                  background: colorScheme.error.withValues(alpha: 0.10),
+                  foreground: colorScheme.error,
+                  size: 32,
+                  iconSize: 16,
+                ),
+                title: Text(
+                  widget.profile.isDeletionPending
+                      ? 'Finish deleting account'
+                      : 'Delete account',
+                  style: TextStyle(color: colorScheme.error),
+                ),
+                subtitle: Text(
+                  widget.profile.isDeletionPending
+                      ? 'Deleting did not finish. Tap to complete it.'
+                      : 'Permanently delete your account and personal data',
+                ),
+                onTap: () => startAccountDeletion(
+                  context,
+                  ref,
+                  userId: widget.profile.userId,
+                  resuming: widget.profile.isDeletionPending,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

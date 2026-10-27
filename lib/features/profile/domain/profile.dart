@@ -8,6 +8,7 @@ class Profile {
     required this.displayName,
     required this.createdAt,
     this.avatarUrl,
+    this.accountState = 'active',
   });
 
   final String userId;
@@ -16,6 +17,11 @@ class Profile {
   final String? avatarUrl;
   final DateTime createdAt;
 
+  /// 'active', or 'deleting' while an account deletion is unfinished.
+  final String accountState;
+
+  bool get isDeletionPending => accountState == 'deleting';
+
   factory Profile.fromMap(Map<String, dynamic> map) {
     return Profile(
       userId: map['user_id'] as String,
@@ -23,6 +29,7 @@ class Profile {
       displayName: map['display_name'] as String,
       avatarUrl: map['avatar_url'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
+      accountState: map['account_state'] as String? ?? 'active',
     );
   }
 }

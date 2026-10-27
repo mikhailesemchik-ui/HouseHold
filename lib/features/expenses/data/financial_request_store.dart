@@ -152,6 +152,21 @@ class FinancialRequestStore {
     ]),
   );
 
+  /// Forgets every unresolved request id of ONE user (their account was
+  /// deleted). Entries of other users on this device are not touched.
+  Future<void> clearUser(String userId) => _serialized(() async {
+    for (final key in _prefs.getKeys().toList()) {
+      final parts = key.split('/');
+      if (parts.length >= 4 &&
+          parts[0] == 'pending_financial_op' &&
+          parts[2] == userId) {
+        if (!await _prefs.remove(key)) {
+          throw StateError('pending financial operation was not removed');
+        }
+      }
+    }
+  });
+
   /// Durably records a fresh request id for [payloadHash] and returns it.
   /// Throws [FinancialPendingLimitException] when the registry is full and a
   /// [StateError] if the write is not confirmed, so nothing is ever sent with
