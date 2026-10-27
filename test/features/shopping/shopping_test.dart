@@ -10,6 +10,7 @@ import 'package:household_os/features/shopping/data/shopping_repository.dart';
 import 'package:household_os/features/shopping/domain/shopping_item.dart';
 import 'package:household_os/features/shopping/presentation/shopping_provider.dart';
 import 'package:household_os/features/shopping/presentation/shopping_screen.dart';
+import 'package:household_os/core/widgets/app_screen_header.dart';
 
 ShoppingItem makeItem({
   String id = 'item-1',
@@ -54,6 +55,22 @@ Widget buildScreen(Stream<List<ShoppingItem>> stream, {double? navBarHeight}) {
 }
 
 void main() {
+  testWidgets('Shopping header title is centred on the full width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(buildScreen(const Stream.empty()));
+    await tester.pump();
+
+    final title = find.descendant(
+      of: find.byType(AppScreenHeader),
+      matching: find.text('Shopping'),
+    );
+    expect(tester.getCenter(title).dx, closeTo(180, 1));
+    expect(tester.takeException(), isNull);
+  });
+
   // ---------------------------------------------------------------------------
   group('ShoppingItem.fromMap', () {
     final baseMap = {

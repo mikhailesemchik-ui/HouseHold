@@ -7,6 +7,7 @@ import 'package:household_os/features/homes/domain/household_stats.dart';
 import 'package:household_os/features/homes/domain/task_rotation_suggestion.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
 import 'package:household_os/features/homes/presentation/statistics_screen.dart';
+import 'package:household_os/core/widgets/app_screen_header.dart';
 
 void main() {
   const request = HouseholdStatsRequest(
@@ -46,6 +47,24 @@ void main() {
       ),
     );
   }
+
+  testWidgets('Statistics header title is centred on the full width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      buildScreen(() => Completer<HouseholdStats>().future),
+    );
+    await tester.pump();
+
+    final title = find.descendant(
+      of: find.byType(AppScreenHeader),
+      matching: find.text('Statistics'),
+    );
+    expect(tester.getCenter(title).dx, closeTo(180, 1));
+    expect(tester.takeException(), isNull);
+  });
 
   TaskCompletionRecord completion({
     required String id,

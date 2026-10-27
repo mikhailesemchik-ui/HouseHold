@@ -258,6 +258,8 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
         child: useCloseButton ? const AppCloseButton() : const AppBackButton(),
       ),
       title: _isEdit ? 'Edit task' : 'New task',
+      centerTitle: true,
+      compactTitle: true,
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: AppSpacing.xs),
@@ -276,6 +278,12 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
                     style: TextButton.styleFrom(
                       foregroundColor: colorScheme.primary,
                       textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                      // Trims the button's invisible side padding so the
+                      // centred title keeps enough room. Min size, and so the
+                      // tap target, is unchanged.
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
                     ),
                     child: Text(_isEdit ? 'Save' : 'Create'),
                   ),

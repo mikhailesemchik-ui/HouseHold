@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// This is a **shell-internal rendering detail**. Feature screens must never
 /// use it to compute their own bottom clearance — the shell already publishes
 /// the measured result through `MediaQuery` (see [AppShellMetrics]).
-const double kNavBarContentHeight = 80.0;
+const double kNavBarContentHeight = 88.0;
 
 /// Clearance for a floating action button that sits above the shell's
 /// navigation: 56dp FAB + 16dp margin. Describes the control, not the nav bar.

@@ -764,7 +764,7 @@ class _PrimaryTile extends StatelessWidget {
           if (count != null) ...[
             Text(
               '$count',
-              style: theme.textTheme.heroNumber?.copyWith(fontSize: 28),
+              style: theme.textTheme.heroNumber?.copyWith(fontSize: 32),
             ),
             Text(
               unit,
@@ -816,8 +816,8 @@ class _QuietTile extends StatelessWidget {
       // padding — this pair should read as lighter weight, not just as a
       // primary tile with no hero number.
       padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.md,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -829,8 +829,8 @@ class _QuietTile extends StatelessWidget {
                 icon: icon,
                 background: accent.container,
                 foreground: accent.icon,
-                size: 26,
-                iconSize: 14,
+                size: 32,
+                iconSize: 17,
               ),
               const SizedBox(width: AppSpacing.sm),
               Flexible(
@@ -935,7 +935,7 @@ class _TileSurface extends StatelessWidget {
     required this.onTap,
     required this.semanticLabel,
     required this.child,
-    this.padding = const EdgeInsets.all(AppSpacing.md),
+    this.padding = const EdgeInsets.all(AppSpacing.base),
   });
 
   final VoidCallback onTap;

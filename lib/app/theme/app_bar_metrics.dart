@@ -8,9 +8,9 @@ abstract final class AppBarMetrics {
   /// and the 48dp circular leading/action buttons with breathing room.
   static const double toolbarHeight = 72.0;
 
-  /// 8dp inset before the 48dp circular back button + 8dp gap after it,
+  /// 8dp inset before the 56dp circular back button + 8dp gap after it,
   /// so the button never sits flush against the screen edge.
-  static const double leadingWidth = 64.0;
+  static const double leadingWidth = 72.0;
 
   /// Gap between the leading button and the title (and, with no leading,
   /// the title's own left inset).

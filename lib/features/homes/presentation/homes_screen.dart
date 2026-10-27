@@ -285,8 +285,6 @@ class _HomeRow extends ConsumerWidget {
               icon: Icons.home_rounded,
               background: colorScheme.primary.withValues(alpha: 0.10),
               foreground: colorScheme.primary,
-              size: 40,
-              iconSize: 20,
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -318,7 +316,7 @@ class _HomeRow extends ConsumerWidget {
             Icon(
               Icons.chevron_right,
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
-              size: 20,
+              size: 24,
             ),
           ],
         ),

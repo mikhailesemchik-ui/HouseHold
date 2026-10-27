@@ -273,7 +273,7 @@ class _TodayEntryTile extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             Icon(
               Icons.chevron_right_rounded,
-              size: 20,
+              size: 24,
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
             ),
           ],

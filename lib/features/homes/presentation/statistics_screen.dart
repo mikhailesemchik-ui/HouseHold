@@ -99,6 +99,8 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     const header = AppScreenHeader(
       leading: Center(child: AppBackButton()),
       title: 'Statistics',
+      centerTitle: true,
+      compactTitle: true,
     );
 
     return Scaffold(

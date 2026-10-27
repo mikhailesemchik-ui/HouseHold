@@ -24,6 +24,7 @@ void main() {
     String publicId = 'alice#1234',
     Size size = const Size(400, 800),
     double textScale = 1.0,
+    TargetPlatform platform = TargetPlatform.android,
   }) {
     return ProviderScope(
       overrides: [
@@ -44,7 +45,7 @@ void main() {
           textScaler: TextScaler.linear(textScale),
         ),
         child: MaterialApp(
-          theme: appTheme,
+          theme: appTheme.copyWith(platform: platform),
           home: Scaffold(
             extendBody: true,
             bottomNavigationBar: SizedBox(height: navBarHeight),
@@ -66,6 +67,13 @@ void main() {
     );
     return (sliverPadding.padding as EdgeInsets).bottom;
   }
+
+  testWidgets('Profile keeps its left-aligned root title', (tester) async {
+    await tester.pumpWidget(buildProfileScreen(safeAreaBottom: 0));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Profile').first).dx, closeTo(16, 1));
+  });
 
   group('ProfileScreen bottom-nav clearance', () {
     testWidgets(
@@ -89,6 +97,55 @@ void main() {
         expect(bottomPaddingOfList(tester), navBarHeight);
       },
     );
+
+    for (final width in [337.0, 414.0]) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          'last card keeps its gap above the nav at ${width}dp / ${scale}x',
+          (tester) async {
+            const navBarHeight = 122.0;
+            for (final (platform, gap) in [
+              (TargetPlatform.android, 0.0),
+              (TargetPlatform.iOS, 16.0),
+            ]) {
+              await tester.pumpWidget(
+                buildProfileScreen(
+                  safeAreaBottom: 34,
+                  navBarHeight: navBarHeight,
+                  size: Size(width, 800),
+                  textScale: scale,
+                  platform: platform,
+                ),
+              );
+              await tester.pumpAndSettle();
+              await tester.scrollUntilVisible(
+                find.text('Show task names'),
+                300,
+              );
+              await tester.drag(find.byType(ListView), const Offset(0, -2000));
+              await tester.pumpAndSettle();
+
+              final navTop = tester
+                  .getRect(
+                    find.byWidgetPredicate(
+                      (w) => w is SizedBox && w.height == navBarHeight,
+                    ),
+                  )
+                  .top;
+              final rowBottom = tester
+                  .getRect(find.byType(SwitchListTile).last)
+                  .bottom;
+              expect(
+                navTop - rowBottom,
+                closeTo(gap, 0.5),
+                reason: '$platform',
+              );
+              expect(tester.takeException(), isNull);
+            }
+          },
+        );
+      }
+    }
 
     testWidgets('supporting copy for the final row does not overflow', (
       tester,

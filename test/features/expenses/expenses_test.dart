@@ -11,6 +11,7 @@ import 'package:household_os/features/expenses/domain/money.dart';
 import 'package:household_os/features/expenses/domain/settlement.dart';
 import 'package:household_os/features/expenses/presentation/expenses_provider.dart';
 import 'package:household_os/features/expenses/presentation/expenses_screen.dart';
+import 'package:household_os/core/widgets/app_screen_header.dart';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -127,6 +128,22 @@ Widget buildScreen(
 // ---------------------------------------------------------------------------
 
 void main() {
+  testWidgets('Expenses header title is centred on the full width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(buildScreen(const Stream.empty()));
+    await tester.pump();
+
+    final title = find.descendant(
+      of: find.byType(AppScreenHeader),
+      matching: find.text('Expenses'),
+    );
+    expect(tester.getCenter(title).dx, closeTo(180, 1));
+    expect(tester.takeException(), isNull);
+  });
+
   group('Money.parseAmountCents', () {
     test('parses integer amount', () {
       expect(Money.parseAmountCents('82'), 8200);

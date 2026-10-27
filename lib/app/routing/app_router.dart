@@ -558,8 +558,8 @@ class _NavDestinationTile extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+                  horizontal: 18,
+                  vertical: 10,
                 ),
                 child: TweenAnimationBuilder<Color?>(
                   duration: selectedStateDuration,
@@ -588,14 +588,14 @@ class _NavDestinationTile extends StatelessWidget {
                               : destination.icon,
                           key: ValueKey(selected),
                           color: animatedColor,
-                          size: 24,
+                          size: 28,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         destination.label,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 14,
                           fontWeight: selected
                               ? FontWeight.w600
                               : FontWeight.w500,

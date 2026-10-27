@@ -16,6 +16,7 @@ import 'package:household_os/features/homes/presentation/household_detail_screen
 import 'package:household_os/features/homes/presentation/members_screen.dart';
 import 'package:household_os/features/tasks/domain/task_member.dart';
 import 'package:household_os/features/tasks/presentation/tasks_provider.dart';
+import 'package:household_os/core/widgets/app_screen_header.dart';
 
 Map<String, dynamic> baseEventMap({
   String id = 'ev-1',
@@ -201,6 +202,22 @@ Widget buildMembersScreen(
 }
 
 void main() {
+  testWidgets('Members header title is centred on the full width', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(buildMembersScreen(const []));
+    await tester.pump();
+
+    final title = find.descendant(
+      of: find.byType(AppScreenHeader),
+      matching: find.text('Members'),
+    );
+    expect(tester.getCenter(title).dx, closeTo(180, 1));
+    expect(tester.takeException(), isNull);
+  });
+
   group('HouseholdEvent.fromMap', () {
     test('parses all fields', () {
       final event = HouseholdEvent.fromMap(baseEventMap());
@@ -1296,10 +1313,13 @@ void main() {
 
       expect(find.text('Tasks'), findsOneWidget);
       expect(find.text('Shopping'), findsOneWidget);
-      expect(find.text('Expenses'), findsOneWidget);
-      expect(find.text('Members'), findsOneWidget);
       // At 2.0x scale, tiles correctly fall back to one column each (see the
-      // Phase 1 breakpoint fix), so Statistics sits further down the list.
+      // Phase 1 breakpoint fix), so the lower tiles sit further down the lazy
+      // list and are scrolled into view.
+      await tester.scrollUntilVisible(find.text('Expenses'), 200);
+      expect(find.text('Expenses'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Members'), 200);
+      expect(find.text('Members'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('Statistics'), 200);
       expect(find.text('Statistics'), findsOneWidget);
       expect(tester.takeException(), isNull);

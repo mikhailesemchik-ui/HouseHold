@@ -14,7 +14,7 @@ class AppSoftCard extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.padding = const EdgeInsets.all(AppSpacing.md),
+    this.padding = const EdgeInsets.all(AppSpacing.base),
     this.radius = AppRadius.xl,
   });
 

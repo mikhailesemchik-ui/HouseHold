@@ -6,11 +6,12 @@ import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_empty_state.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
+import 'package:household_os/core/widgets/app_keyboard_dismiss.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/expenses/data/expense_repository.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
-import 'package:household_os/features/expenses/domain/money.dart';
+import 'package:household_os/features/expenses/presentation/amount_input.dart';
 import 'package:household_os/features/expenses/presentation/expenses_provider.dart';
 import 'package:household_os/features/expenses/presentation/widgets/member_option.dart';
 
@@ -95,7 +96,10 @@ class _SettlementFormScreenState extends ConsumerState<SettlementFormScreen> {
     final membersError = (fromId == null || toId == null || fromId == toId)
         ? 'Select two different members.'
         : null;
-    final amountCents = Money.parseAmountCents(_amountController.text);
+    final amountCents = parseAmountInput(
+      _amountController.text,
+      Theme.of(context).platform,
+    );
     final amountError = amountCents == null
         ? 'Enter a valid amount (e.g. 12.50)'
         : null;
@@ -168,8 +172,9 @@ class _SettlementFormScreenState extends ConsumerState<SettlementFormScreen> {
         child: useCloseButton ? const AppCloseButton() : const AppBackButton(),
       ),
       title: 'Record settlement',
-      // The title is long next to the trailing "Record" action's own
-      // width — shrink-to-fit rather than ellipsize ("Record sett…").
+      // Long next to the trailing "Record" action: centred, and broken onto
+      // two lines rather than shrunk or ellipsized ("Record sett…").
+      centerTitle: true,
       compactTitle: true,
       actions: [
         Padding(
@@ -189,6 +194,12 @@ class _SettlementFormScreenState extends ConsumerState<SettlementFormScreen> {
                     style: TextButton.styleFrom(
                       foregroundColor: colorScheme.primary,
                       textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                      // Trims the button's invisible side padding so the
+                      // centred title keeps enough room. Min size, and so the
+                      // tap target, is unchanged.
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
                     ),
                     child: const Text('Record'),
                   ),
@@ -204,58 +215,60 @@ class _SettlementFormScreenState extends ConsumerState<SettlementFormScreen> {
         // Pushed on the root navigator, outside the shell's `AppBackground`
         // — see `appFlatBackgroundFallback`'s doc comment.
         backgroundColor: appFlatBackgroundFallback,
-        body: SafeArea(
-          child: membersAsync.when(
-            loading: () => ListView(
-              children: [
-                header,
-                const Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              ],
-            ),
-            error: (_, _) => ListView(
-              children: [
-                header,
-                AppErrorState(
-                  message: 'Could not load members. Please try again.',
-                  onRetry: () => ref.invalidate(
-                    expenseMembersProvider(widget.householdId),
+        body: AppKeyboardDismiss(
+          child: SafeArea(
+            child: membersAsync.when(
+              loading: () => ListView(
+                children: [
+                  header,
+                  const Padding(
+                    padding: EdgeInsets.all(AppSpacing.xl),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
-                ),
-              ],
-            ),
-            data: (members) {
-              if (members.length < 2) {
-                return ListView(
-                  children: [
-                    header,
-                    const AppEmptyState(
-                      title:
-                          'At least two active members are needed to record a payment.',
+                ],
+              ),
+              error: (_, _) => ListView(
+                children: [
+                  header,
+                  AppErrorState(
+                    message: 'Could not load members. Please try again.',
+                    onRetry: () => ref.invalidate(
+                      expenseMembersProvider(widget.householdId),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+              data: (members) {
+                if (members.length < 2) {
+                  return ListView(
+                    children: [
+                      header,
+                      const AppEmptyState(
+                        title:
+                            'At least two active members are needed to record a payment.',
+                      ),
+                    ],
+                  );
+                }
+                _initDefaultsOnce(members, currentUserId);
+                return _SettlementFormFields(
+                  header: header,
+                  members: members,
+                  fromUserId: _fromUserId,
+                  toUserId: _toUserId,
+                  membersError: _membersError,
+                  amountController: _amountController,
+                  amountFocusNode: _amountFocusNode,
+                  amountError: _amountError,
+                  noteController: _noteController,
+                  onSelectFrom: _selectFrom,
+                  onSelectTo: _selectTo,
+                  onAmountChanged: _onAmountChanged,
+                  onNoteChanged: _onNoteChanged,
+                  onAmountSubmitted: _submit,
                 );
-              }
-              _initDefaultsOnce(members, currentUserId);
-              return _SettlementFormFields(
-                header: header,
-                members: members,
-                fromUserId: _fromUserId,
-                toUserId: _toUserId,
-                membersError: _membersError,
-                amountController: _amountController,
-                amountFocusNode: _amountFocusNode,
-                amountError: _amountError,
-                noteController: _noteController,
-                onSelectFrom: _selectFrom,
-                onSelectTo: _selectTo,
-                onAmountChanged: _onAmountChanged,
-                onNoteChanged: _onNoteChanged,
-                onAmountSubmitted: _submit,
-              );
-            },
+              },
+            ),
           ),
         ),
       ),
@@ -302,6 +315,7 @@ class _SettlementFormFields extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return ListView(
+      keyboardDismissBehavior: appKeyboardDismissBehavior(context),
       // The header must stay unpadded — the form fields' horizontal/
       // bottom insets live on the inner `Padding` below instead of on
       // this outer list, which opts out of auto-consuming MediaQuery

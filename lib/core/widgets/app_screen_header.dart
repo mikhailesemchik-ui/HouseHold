@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:household_os/app/theme/app_bar_metrics.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
@@ -41,10 +43,10 @@ class AppScreenHeader extends StatelessWidget {
   final Widget? bottom;
 
   /// When `true`, the title shrinks to fit its available width instead of
-  /// ellipsizing — for a header whose title is long relative to its
-  /// leading/trailing chrome (e.g. Record Settlement's "Record settlement"
-  /// next to a trailing "Record" action). Every other screen leaves this
-  /// `false` and is unaffected.
+  /// ellipsizing, whether or not it is centered — for a header whose title is
+  /// long relative to its leading/trailing chrome (e.g. Record Settlement's
+  /// "Record settlement" next to a trailing "Record" action, or a centered
+  /// title at large text scales). Other screens leave this `false`.
   final bool compactTitle;
 
   /// When `true`, the title is centered on the header's full width, not in
@@ -117,37 +119,183 @@ class AppScreenHeader extends StatelessWidget {
   }
 
   Widget _centeredRow(AppBarThemeData appBarTheme) {
-    return Stack(
+    return CustomMultiChildLayout(
+      delegate: _CenteredHeaderLayout(),
       children: [
-        Positioned.fill(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal:
-                  AppBarMetrics.leadingWidth + AppBarMetrics.titleSpacing,
-            ),
-            child: Center(
-              child: Text(
-                title,
-                style: appBarTheme.titleTextStyle,
-                maxLines: 1,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.ellipsis,
-              ),
+        LayoutId(
+          id: _HeaderSlot.leading,
+          child: leading ?? const SizedBox.shrink(),
+        ),
+        if (actions.isNotEmpty)
+          LayoutId(
+            id: _HeaderSlot.trailing,
+            child: Padding(
+              padding: AppBarMetrics.actionsPadding,
+              child: Row(mainAxisSize: MainAxisSize.min, children: actions),
             ),
           ),
-        ),
-        Row(
-          children: [
-            SizedBox(width: AppBarMetrics.leadingWidth, child: leading),
-            const Spacer(),
-            if (actions.isNotEmpty)
-              Padding(
-                padding: AppBarMetrics.actionsPadding,
-                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
-              ),
-          ],
+        LayoutId(
+          id: _HeaderSlot.title,
+          child: _CenteredTitle(
+            title: title,
+            style: appBarTheme.titleTextStyle,
+            compact: compactTitle,
+          ),
         ),
       ],
     );
+  }
+}
+
+enum _HeaderSlot { leading, trailing, title }
+
+/// Centres the title on the full header width, reserving the same room on
+/// both sides: the larger of the leading slot and the trailing actions'
+/// measured width (which grows with text scale).
+///
+/// When a wide trailing action would leave the symmetric title area much
+/// narrower than the space actually free between the two controls, the title
+/// is centred in that free space instead, so large text never forces the
+/// title to shrink to an unreadable size just to stay on the exact centre.
+class _CenteredHeaderLayout extends MultiChildLayoutDelegate {
+  _CenteredHeaderLayout();
+
+  /// Minimum share of the free space the symmetric area must keep.
+  static const _minSymmetricShare = 0.8;
+
+  @override
+  void performLayout(Size size) {
+    layoutChild(
+      _HeaderSlot.leading,
+      BoxConstraints.tightFor(
+        width: AppBarMetrics.leadingWidth,
+        height: size.height,
+      ),
+    );
+    positionChild(_HeaderSlot.leading, Offset.zero);
+
+    final leadingReserve =
+        AppBarMetrics.leadingWidth + AppBarMetrics.titleSpacing;
+    var trailingReserve = 0.0;
+    if (hasChild(_HeaderSlot.trailing)) {
+      final trailing = layoutChild(
+        _HeaderSlot.trailing,
+        BoxConstraints(
+          maxWidth: size.width - AppBarMetrics.leadingWidth,
+          maxHeight: size.height,
+        ),
+      );
+      positionChild(
+        _HeaderSlot.trailing,
+        Offset(
+          size.width - trailing.width,
+          (size.height - trailing.height) / 2,
+        ),
+      );
+      trailingReserve = trailing.width + AppBarMetrics.titleSpacing;
+    }
+
+    final side = math.max(leadingReserve, trailingReserve);
+    final symmetricWidth = math.max(0.0, size.width - 2 * side);
+    final freeWidth = math.max(
+      0.0,
+      size.width - leadingReserve - trailingReserve,
+    );
+    // Only a trailing action wider than the leading slot can eat into the
+    // symmetric area; otherwise the title is always on the exact centre.
+    final centred =
+        trailingReserve <= leadingReserve ||
+        symmetricWidth >= _minSymmetricShare * freeWidth;
+    final left = centred ? side : leadingReserve;
+    final width = centred ? symmetricWidth : freeWidth;
+
+    final title = layoutChild(
+      _HeaderSlot.title,
+      BoxConstraints(maxWidth: width, maxHeight: size.height),
+    );
+    positionChild(
+      _HeaderSlot.title,
+      Offset(
+        left + (width - title.width) / 2,
+        (size.height - title.height) / 2,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRelayout(covariant _CenteredHeaderLayout oldDelegate) => false;
+}
+
+/// The header title for [_CenteredHeaderLayout]. A compact title that would
+/// have to shrink below [_minSingleLineScale] on one line is broken at a
+/// space into two lines instead, which keeps it larger and readable.
+class _CenteredTitle extends StatelessWidget {
+  const _CenteredTitle({
+    required this.title,
+    required this.style,
+    required this.compact,
+  });
+
+  final String title;
+  final TextStyle? style;
+  final bool compact;
+
+  static const _minSingleLineScale = 0.85;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!compact) {
+      return Text(
+        title,
+        style: style,
+        maxLines: 1,
+        textAlign: TextAlign.center,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final oneLineWidth = _singleLineWidth(context);
+        final twoLines = _twoLineTitle();
+        final useTwoLines =
+            twoLines != null &&
+            constraints.maxWidth / oneLineWidth < _minSingleLineScale;
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            useTwoLines ? twoLines : title,
+            // Tighter leading so two lines fit the toolbar height.
+            style: useTwoLines ? style?.copyWith(height: 1.1) : style,
+            maxLines: useTwoLines ? 2 : 1,
+            softWrap: false,
+            textAlign: TextAlign.center,
+          ),
+        );
+      },
+    );
+  }
+
+  double _singleLineWidth(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: title, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  /// [title] broken at the space closest to its middle, or null without one.
+  String? _twoLineTitle() {
+    final middle = title.length / 2;
+    int? best;
+    for (var i = 0; i < title.length; i++) {
+      if (title[i] != ' ') continue;
+      if (best == null || (i - middle).abs() < (best - middle).abs()) best = i;
+    }
+    if (best == null) return null;
+    return '${title.substring(0, best)}\n${title.substring(best + 1)}';
   }
 }

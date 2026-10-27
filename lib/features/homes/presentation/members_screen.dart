@@ -52,6 +52,8 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
     const header = AppScreenHeader(
       leading: Center(child: AppBackButton()),
       title: 'Members',
+      centerTitle: true,
+      compactTitle: true,
     );
 
     return Scaffold(

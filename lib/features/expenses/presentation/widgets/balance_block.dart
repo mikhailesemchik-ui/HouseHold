@@ -277,7 +277,7 @@ class _DebtLine extends StatelessWidget {
             AppMoneyText(
               formatted,
               style: textTheme.heroNumber?.copyWith(
-                fontSize: 34,
+                fontSize: 38,
                 color: amountColor,
               ),
             ),

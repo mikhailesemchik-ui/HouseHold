@@ -19,7 +19,7 @@ class AppCircleIconButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final String tooltip;
 
-  static const _diameter = 48.0;
+  static const _diameter = 56.0;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +68,7 @@ class AppCircleIconButton extends StatelessWidget {
                   height: _diameter,
                   child: IconButton(
                     icon: Icon(icon),
+                    iconSize: 28,
                     onPressed: onPressed,
                     tooltip: tooltip,
                     color: colorScheme.onSurface,

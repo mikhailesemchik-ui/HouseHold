@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:household_os/app/theme/app_bar_metrics.dart';
+import 'package:household_os/app/theme/app_page_transitions.dart';
 import 'package:household_os/core/theme/app_radius.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 
@@ -334,7 +335,7 @@ final appTheme = ThemeData(
     // Bigger/bolder than the M3 default `titleLarge`, matching the
     // reference's large rounded screen titles.
     titleTextStyle: TextStyle(
-      fontSize: 28,
+      fontSize: 31,
       fontWeight: FontWeight.w800,
       letterSpacing: -0.5,
       color: _kOnSurface,
@@ -361,6 +362,9 @@ final appTheme = ThemeData(
       TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
         fallbackColor: Colors.transparent,
       ),
+      // iOS keeps the native slide; see the builder for why pushed pages
+      // need their own background there.
+      TargetPlatform.iOS: AppCupertinoPageTransitionsBuilder(),
     },
   ),
   // M3's auto-derived FAB defaults to `primaryContainer`, which reads as a
@@ -461,7 +465,7 @@ final appTheme = ThemeData(
   ),
   filledButtonTheme: FilledButtonThemeData(
     style: FilledButton.styleFrom(
-      minimumSize: const Size(64, 48),
+      minimumSize: const Size(72, 54),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
@@ -474,7 +478,7 @@ final appTheme = ThemeData(
       // token as every hairline and input border in the app, not a
       // coincidentally-matching value.
       side: const BorderSide(color: _kDivider),
-      minimumSize: const Size(64, 48),
+      minimumSize: const Size(72, 54),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
@@ -482,7 +486,7 @@ final appTheme = ThemeData(
   ),
   textButtonTheme: TextButtonThemeData(
     style: TextButton.styleFrom(
-      minimumSize: const Size(48, 44),
+      minimumSize: const Size(52, 48),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
@@ -561,8 +565,8 @@ final appTheme = ThemeData(
       ),
       // 44dp tall: a practical, accessible tap target without the oversized
       // pill look the v1 board used.
-      minimumSize: const Size(64, 44),
-      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+      minimumSize: const Size(64, 48),
+      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
     ),
   ),
   chipTheme: ChipThemeData(
@@ -598,12 +602,34 @@ final appTheme = ThemeData(
   textTheme: const TextTheme(
     headlineMedium: TextStyle(fontWeight: FontWeight.w800, letterSpacing: -0.4),
     headlineSmall: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.4),
-    titleLarge: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.3),
-    titleMedium: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.2),
-    titleSmall: TextStyle(fontWeight: FontWeight.w600, letterSpacing: -0.1),
-    bodyLarge: TextStyle(height: 1.5),
-    bodyMedium: TextStyle(height: 1.45),
-    labelMedium: TextStyle(letterSpacing: 0.08, fontWeight: FontWeight.w500),
-    labelSmall: TextStyle(letterSpacing: 0.06, fontWeight: FontWeight.w500),
+    titleLarge: TextStyle(
+      fontSize: 26,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.3,
+    ),
+    titleMedium: TextStyle(
+      fontSize: 19,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.2,
+    ),
+    titleSmall: TextStyle(
+      fontSize: 17,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.1,
+    ),
+    bodyLarge: TextStyle(fontSize: 18, height: 1.5),
+    bodyMedium: TextStyle(fontSize: 16, height: 1.45),
+    bodySmall: TextStyle(fontSize: 14),
+    labelLarge: TextStyle(fontSize: 16),
+    labelMedium: TextStyle(
+      fontSize: 14,
+      letterSpacing: 0.08,
+      fontWeight: FontWeight.w500,
+    ),
+    labelSmall: TextStyle(
+      fontSize: 13,
+      letterSpacing: 0.06,
+      fontWeight: FontWeight.w500,
+    ),
   ),
 );

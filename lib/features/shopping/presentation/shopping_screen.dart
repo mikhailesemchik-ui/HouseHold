@@ -119,6 +119,8 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     const header = AppScreenHeader(
       leading: Center(child: AppBackButton()),
       title: 'Shopping',
+      centerTitle: true,
+      compactTitle: true,
     );
 
     return Scaffold(
@@ -333,7 +335,7 @@ class _ShoppingRow extends StatelessWidget {
       child: AppSoftCard(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: AppSpacing.xs,
+          vertical: AppSpacing.sm,
         ),
         child: Row(
           children: [
@@ -513,8 +515,8 @@ class _QuickAddComposer extends StatelessWidget {
                             customBorder: const CircleBorder(),
                             onTap: isSubmitting ? null : onSubmit,
                             child: SizedBox(
-                              width: 48,
-                              height: 48,
+                              width: 52,
+                              height: 52,
                               child: Center(
                                 child: isSubmitting
                                     ? SizedBox(

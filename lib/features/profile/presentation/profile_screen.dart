@@ -313,7 +313,17 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
       // deliberately NOT consumed here — `AppScreenHeader` reserves its own
       // top spacing, so this list's viewport can extend to the physical
       // screen edge and let scrolled content pass under the status-bar haze.
-      padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+      // The shell publishes the nav bar's full height as the bottom padding,
+      // which parks the last card flush against the top of the floating pill.
+      // iOS gets a small breathing gap on top of it; Android keeps the
+      // exact clearance it has always had.
+      padding: EdgeInsets.only(
+        bottom:
+            MediaQuery.paddingOf(context).bottom +
+            (Theme.of(context).platform == TargetPlatform.iOS
+                ? AppSpacing.base
+                : 0),
+      ),
       children: [
         widget.header,
         const SizedBox(height: AppSpacing.xl),

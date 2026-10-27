@@ -14,8 +14,8 @@ class AppIconChip extends StatelessWidget {
     required this.icon,
     required this.background,
     required this.foreground,
-    this.size = 36,
-    this.iconSize = 18,
+    this.size = 44,
+    this.iconSize = 22,
   });
 
   final IconData icon;

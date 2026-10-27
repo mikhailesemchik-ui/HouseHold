@@ -92,6 +92,8 @@ class _ExpensesBody extends ConsumerWidget {
     const header = AppScreenHeader(
       leading: Center(child: AppBackButton()),
       title: 'Expenses',
+      centerTitle: true,
+      compactTitle: true,
     );
 
     // Both streams are required for a correct balance. Previously a

@@ -1,6 +1,9 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:household_os/app/theme/app_page_transitions.dart';
 import 'package:household_os/app/theme/app_theme.dart';
+import 'package:household_os/core/widgets/app_background.dart';
 
 /// Phase B: theme-foundation contracts. These pin semantic token values and
 /// state coverage intentionally — not for pixel-perfect matching, but because
@@ -206,7 +209,7 @@ void main() {
         // style (bigger/bolder, matching the reference's large rounded
         // titles) instead of following the M3 default `titleLarge` — this
         // replaces the prior "no override" contract.
-        expect(resolvedStyle.fontSize, 28.0);
+        expect(resolvedStyle.fontSize, 31.0);
         expect(resolvedStyle.fontWeight, FontWeight.w800);
         expect(resolvedStyle.color, colorScheme.onSurface);
       },
@@ -228,6 +231,132 @@ void main() {
         (builder! as PredictiveBackPageTransitionsBuilder).fallbackColor,
         Colors.transparent,
       );
+    });
+
+    test('ios uses the native slide with a background-aware builder', () {
+      expect(
+        appTheme.pageTransitionsTheme.builders[TargetPlatform.iOS],
+        isA<AppCupertinoPageTransitionsBuilder>(),
+      );
+    });
+
+    test('ios builder keeps the native Cupertino durations', () {
+      const native = CupertinoPageTransitionsBuilder();
+      const builder = AppCupertinoPageTransitionsBuilder();
+      expect(builder.transitionDuration, native.transitionDuration);
+      expect(
+        builder.reverseTransitionDuration,
+        native.reverseTransitionDuration,
+      );
+    });
+
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      testWidgets('pushed $platform route uses its builder duration', (
+        tester,
+      ) async {
+        ModalRoute<void>? pushed;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: appTheme.copyWith(platform: platform),
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) {
+                      pushed = ModalRoute.of(context) as ModalRoute<void>?;
+                      return const Text('pushed');
+                    },
+                  ),
+                ),
+                child: const Text('root'),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('root'));
+        await tester.pumpAndSettle();
+
+        final builder = appTheme.pageTransitionsTheme.builders[platform]!;
+        expect(pushed!.transitionDuration, builder.transitionDuration);
+        expect(
+          pushed!.reverseTransitionDuration,
+          builder.reverseTransitionDuration,
+        );
+        if (platform == TargetPlatform.iOS) {
+          expect(
+            pushed!.transitionDuration,
+            const CupertinoPageTransitionsBuilder().transitionDuration,
+          );
+        }
+      });
+    }
+
+    testWidgets('ios pushed page paints AppBackground, first route does not', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme.copyWith(platform: TargetPlatform.iOS),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const Text('pushed')),
+              ),
+              child: const Text('root'),
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(AppBackground), findsNothing);
+
+      await tester.tap(find.text('root'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.ancestor(
+          of: find.text('pushed'),
+          matching: find.byType(AppBackground),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('android pushed page gets no extra AppBackground', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme.copyWith(platform: TargetPlatform.android),
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const Text('pushed')),
+              ),
+              child: const Text('root'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('root'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppBackground), findsNothing);
+    });
+  });
+
+  group('type scale', () {
+    test('shared roles keep their hierarchy at the enlarged sizes', () {
+      final t = appTheme.textTheme;
+      expect(t.titleLarge!.fontSize, 26);
+      expect(t.titleMedium!.fontSize, 19);
+      expect(t.bodyLarge!.fontSize, 18);
+      expect(t.bodyMedium!.fontSize, 16);
+      expect(t.bodySmall!.fontSize, 14);
+      expect(t.labelSmall!.fontSize, 13);
+      expect(t.titleLarge!.fontSize!, greaterThan(t.titleMedium!.fontSize!));
+      expect(t.bodyLarge!.fontSize!, greaterThan(t.bodyMedium!.fontSize!));
+      expect(t.bodyMedium!.fontSize!, greaterThan(t.bodySmall!.fontSize!));
+      expect(t.bodySmall!.fontSize!, greaterThan(t.labelSmall!.fontSize!));
     });
   });
 

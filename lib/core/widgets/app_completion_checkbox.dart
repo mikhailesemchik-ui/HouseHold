@@ -42,7 +42,7 @@ class AppCompletionCheckbox extends StatelessWidget {
 
   final VoidCallback onChanged;
 
-  static const _visualDiameter = 22.0;
+  static const _visualDiameter = 28.0;
   static const _tapTargetSize = 48.0;
 
   @override
@@ -95,7 +95,7 @@ class AppCompletionCheckbox extends StatelessWidget {
                 opacity: checked ? 1 : 0,
                 child: Icon(
                   Icons.check,
-                  size: 15,
+                  size: 20,
                   color: colorScheme.onPrimary,
                 ),
               ),

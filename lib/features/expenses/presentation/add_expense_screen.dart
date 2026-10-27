@@ -5,12 +5,14 @@ import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_error_state.dart';
+import 'package:household_os/core/widgets/app_keyboard_dismiss.dart';
 import 'package:household_os/core/widgets/app_money_text.dart';
 import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/expenses/data/expense_repository.dart';
 import 'package:household_os/features/expenses/domain/expense.dart';
 import 'package:household_os/features/expenses/domain/money.dart';
+import 'package:household_os/features/expenses/presentation/amount_input.dart';
 import 'package:household_os/features/expenses/presentation/expenses_provider.dart';
 import 'package:household_os/features/expenses/presentation/widgets/member_option.dart';
 
@@ -100,7 +102,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
   Future<void> _submit() async {
     final titleError = ExpenseRepository.validateTitle(_titleController.text);
-    final amountCents = Money.parseAmountCents(_amountController.text);
+    final amountCents = parseAmountInput(
+      _amountController.text,
+      Theme.of(context).platform,
+    );
     final amountError = amountCents == null
         ? 'Enter a valid amount (e.g. 12.50)'
         : null;
@@ -180,6 +185,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         child: useCloseButton ? const AppCloseButton() : const AppBackButton(),
       ),
       title: 'New expense',
+      centerTitle: true,
+      compactTitle: true,
       actions: [
         Padding(
           padding: const EdgeInsets.only(right: AppSpacing.xs),
@@ -198,6 +205,12 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                     style: TextButton.styleFrom(
                       foregroundColor: colorScheme.primary,
                       textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                      // Trims the button's invisible side padding so the
+                      // centred title keeps enough room. Min size, and so the
+                      // tap target, is unchanged.
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                      ),
                     ),
                     child: const Text('Add'),
                   ),
@@ -213,48 +226,50 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         // Pushed on the root navigator, outside the shell's `AppBackground`
         // — see `appFlatBackgroundFallback`'s doc comment.
         backgroundColor: appFlatBackgroundFallback,
-        body: SafeArea(
-          child: membersAsync.when(
-            loading: () => ListView(
-              children: [
-                header,
-                const Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              ],
-            ),
-            error: (_, _) => ListView(
-              children: [
-                header,
-                AppErrorState(
-                  message: 'Could not load members. Please try again.',
-                  onRetry: () => ref.invalidate(
-                    expenseMembersProvider(widget.householdId),
+        body: AppKeyboardDismiss(
+          child: SafeArea(
+            child: membersAsync.when(
+              loading: () => ListView(
+                children: [
+                  header,
+                  const Padding(
+                    padding: EdgeInsets.all(AppSpacing.xl),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
-                ),
-              ],
+                ],
+              ),
+              error: (_, _) => ListView(
+                children: [
+                  header,
+                  AppErrorState(
+                    message: 'Could not load members. Please try again.',
+                    onRetry: () => ref.invalidate(
+                      expenseMembersProvider(widget.householdId),
+                    ),
+                  ),
+                ],
+              ),
+              data: (members) {
+                _initDefaultsOnce(members, currentUserId);
+                return _ExpenseFormFields(
+                  header: header,
+                  amountController: _amountController,
+                  titleController: _titleController,
+                  amountFocusNode: _amountFocusNode,
+                  titleFocusNode: _titleFocusNode,
+                  amountError: _amountError,
+                  titleError: _titleError,
+                  participantsError: _participantsError,
+                  members: members,
+                  selectedPayerId: _selectedPayerId,
+                  selectedParticipantIds: _selectedParticipantIds,
+                  onAmountChanged: _onAmountChanged,
+                  onTitleChanged: _onTitleChanged,
+                  onSelectPayer: _selectPayer,
+                  onToggleParticipant: _toggleParticipant,
+                );
+              },
             ),
-            data: (members) {
-              _initDefaultsOnce(members, currentUserId);
-              return _ExpenseFormFields(
-                header: header,
-                amountController: _amountController,
-                titleController: _titleController,
-                amountFocusNode: _amountFocusNode,
-                titleFocusNode: _titleFocusNode,
-                amountError: _amountError,
-                titleError: _titleError,
-                participantsError: _participantsError,
-                members: members,
-                selectedPayerId: _selectedPayerId,
-                selectedParticipantIds: _selectedParticipantIds,
-                onAmountChanged: _onAmountChanged,
-                onTitleChanged: _onTitleChanged,
-                onSelectPayer: _selectPayer,
-                onToggleParticipant: _toggleParticipant,
-              );
-            },
           ),
         ),
       ),
@@ -304,9 +319,13 @@ class _ExpenseFormFields extends StatelessWidget {
     final selectedParticipants = members
         .where((m) => selectedParticipantIds.contains(m.userId))
         .toList();
-    final amountCents = Money.parseAmountCents(amountController.text);
+    final amountCents = parseAmountInput(
+      amountController.text,
+      Theme.of(context).platform,
+    );
 
     return ListView(
+      keyboardDismissBehavior: appKeyboardDismissBehavior(context),
       // The header must stay unpadded — the form fields' horizontal/
       // bottom insets live on the inner `Padding` below instead of on
       // this outer list, which opts out of auto-consuming MediaQuery
@@ -324,39 +343,50 @@ class _ExpenseFormFields extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Hero amount — borderless, tabular. Left-aligned (not centred) so
-              // the € prefix and the digits always sit directly next to each
-              // other, regardless of amount length — centring the digits inside
-              // the remaining space (the previous approach) let a short amount
-              // drift away from the prefix, which visually detached the two.
-              // Bounded width rather than shrink-to-content so it never fights
-              // TextField's own layout.
+              // Hero amount — borderless, tabular. The field hugs its content
+              // (IntrinsicWidth) and is centred as a whole, so "€" and the
+              // digits read as one centred composition at any length. A
+              // full-width left-aligned field centred in a 260dp box (the
+              // previous approach) left a short amount well left of centre.
               Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 260),
-                  child: TextField(
-                    controller: amountController,
-                    focusNode: amountFocusNode,
-                    autofocus: true,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    textInputAction: TextInputAction.next,
-                    onSubmitted: (_) => titleFocusNode.requestFocus(),
-                    onChanged: onAmountChanged,
-                    style: textTheme.heroNumber?.copyWith(fontSize: 48),
-                    decoration: kBorderlessInputDecoration.copyWith(
-                      hintText: '0.00',
-                      prefixText: '€',
-                      prefixStyle: textTheme.heroNumber?.copyWith(
-                        fontSize: 28,
-                        color: colorScheme.onSurfaceVariant,
+                  child: IntrinsicWidth(
+                    child: TextField(
+                      controller: amountController,
+                      focusNode: amountFocusNode,
+                      autofocus: true,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
                       ),
-                      errorText: amountError,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: (_) => titleFocusNode.requestFocus(),
+                      onChanged: onAmountChanged,
+                      style: textTheme.heroNumber?.copyWith(fontSize: 48),
+                      decoration: kBorderlessInputDecoration.copyWith(
+                        hintText: '0.00',
+                        prefixText: '€',
+                        prefixStyle: textTheme.heroNumber?.copyWith(
+                          fontSize: 28,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
+              // Outside the field: the hugging field is narrower than the
+              // message, so a decoration error would wrap inside it.
+              if (amountError != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  amountError!,
+                  textAlign: TextAlign.center,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               TextField(
                 controller: titleController,
