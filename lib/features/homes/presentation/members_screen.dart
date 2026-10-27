@@ -247,6 +247,8 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
   void _refreshHouseholdMembers() {
     ref.invalidate(householdMembersProvider(widget.householdId));
     ref.invalidate(householdSummaryProvider(widget.householdId));
+    // Removing a member revokes the household's invites on the server.
+    ref.invalidate(householdInvitesProvider(widget.householdId));
   }
 }
 
