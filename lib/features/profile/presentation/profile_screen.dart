@@ -17,6 +17,7 @@ import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/app_section_header.dart';
 import 'package:household_os/core/widgets/app_soft_card.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
+import 'package:household_os/features/auth/presentation/account_protection_rows.dart';
 import 'package:household_os/features/profile/data/profile_repository.dart';
 import 'package:household_os/features/profile/domain/profile.dart';
 import 'package:household_os/features/profile/domain/profile_validation.dart';
@@ -547,6 +548,7 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: _SettingsGroupCard(
             rows: [
+              ...accountProtectionRows(context, ref, widget.profile),
               ListTile(
                 leading: AppIconChip(
                   icon: Icons.delete_forever_rounded,

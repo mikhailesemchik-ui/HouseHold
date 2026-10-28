@@ -220,3 +220,21 @@ N=$(cx -s -X POST "$API_URL/rest/v1/rpc/reconcile_account_deletions" -H "apikey:
 [ "$N" = 0 ] || fail "a repeated reconciliation changed $N accounts"
 [ "$(psql_ -c "select account_state from profiles where user_id = '$U2'")" = active ] || fail "reconciliation touched an active user"
 pass "only the service role can reconcile; it closed exactly the orphaned account, repeatably, and no one else"
+
+echo "--- email-linked accounts are refused until reauthentication exists (F1b)"
+LMAIL="accint-linked-$$@example.test"
+LRESP=$(cx -s -X POST "$API_URL/auth/v1/admin/users" -H "apikey: $SERVICE" -H "Authorization: Bearer $SERVICE" \
+  -H "Content-Type: application/json" -d "{\"email\":\"$LMAIL\",\"password\":\"Accint-$$-pw-1\",\"email_confirm\":true}")
+U5=$(echo "$LRESP" | jget "['id']")
+[ -n "$U5" ] || fail "could not create the confirmed email user"
+USERS+=("$U5")
+TOK5=$(cx -s -X POST "$API_URL/auth/v1/token?grant_type=password" -H "apikey: $ANON" -H "Content-Type: application/json" \
+  -d "{\"email\":\"$LMAIL\",\"password\":\"Accint-$$-pw-1\"}" | jget "['access_token']")
+[ -n "$TOK5" ] || fail "the email user could not sign in"
+cx -s -o /dev/null -X POST "$API_URL/rest/v1/profiles" -H "apikey: $ANON" -H "Authorization: Bearer $TOK5" \
+  -H "Content-Type: application/json" -d "{\"user_id\":\"$U5\",\"public_id\":\"INT-${U5:0:8}\",\"display_name\":\"Int linked\"}"
+OUT=$(del_account "$TOK5")
+[ "$(echo "$OUT" | tail -1)" = 403 ] && echo "$OUT" | grep -q reverification_required || fail "a linked account was not refused: $OUT"
+[ "$(psql_ -c "select account_state from profiles where user_id = '$U5'")" = active ] || fail "the refused request changed the profile"
+[ "$(psql_ -c "select count(*) from auth.users where id = '$U5'")" = 1 ] || fail "the linked Auth user was removed"
+pass "linked account -> 403 reverification_required; profile still active, Auth user intact"
