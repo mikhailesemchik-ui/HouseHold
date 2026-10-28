@@ -7,6 +7,10 @@
 #   SB_WORKDIR=<local supabase project dir> DB_CONTAINER=supabase_db_hhsqltest \
 #     bash supabase/tests/account_deletion_integration.sh
 #
+# If the pg_cron job account-deletion-reconcile is active, pause it first (see
+# account_reconciliation_scheduler.sh): it could finalize the orphaned account
+# before the manual reconciliation step below.
+#
 # It creates DISPOSABLE anonymous users, never touches existing accounts, and
 # removes everything it created. It refuses to run unless the database
 # container name contains "hhsqltest" and the API URL is a loopback address.
