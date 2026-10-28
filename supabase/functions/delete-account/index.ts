@@ -3,8 +3,9 @@
 // Flow (the database step and the Auth step are separate services, so this is
 // a recoverable state machine, not one transaction):
 //   1. Validate the caller's JWT with the Auth server (never trust the body).
-//   2. begin_account_deletion() runs as the caller: atomic database cleanup,
-//      marks the profile `deleting`. Safe to repeat.
+//   2. begin_account_deletion(user.id) runs with the service-role client (the
+//      function is service_role only): atomic database cleanup, marks the
+//      profile `deleting`. Safe to repeat.
 //   3. The Auth user is deleted with the service-role client.
 //   4. finalize_account_deletion() marks the profile `deleted`; it refuses
 //      unless the Auth user is really gone.
@@ -64,8 +65,16 @@ Deno.serve(async (request) => {
     return json(403, { error: 'reverification_required' });
   }
 
-  // 2. Database cleanup as the caller (auth.uid() is the only identity used).
-  const { error: beginError } = await userClient.rpc('begin_account_deletion');
+  // Privileged client: service-role key only, never the caller's Authorization.
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  // 2. Database cleanup. Only service_role may call it; the target is the
+  // verified Auth user, never a value from the request body.
+  const { error: beginError } = await admin.rpc('begin_account_deletion', {
+    p_user_id: user.id,
+  });
   if (beginError) {
     if (beginError.code === 'AD002') {
       return json(409, { error: 'owns_households' });
@@ -75,9 +84,6 @@ Deno.serve(async (request) => {
   }
 
   // 3. Auth deletion with the privileged client; only ever the caller's id.
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
   const alreadyGone = deleteError?.status === 404 ||
     deleteError?.code === 'user_not_found';

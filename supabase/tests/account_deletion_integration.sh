@@ -106,6 +106,19 @@ OUT=$(del_account "$T1" '{"confirmation":"nope"}')
 [ "$(psql_ -c "select account_state from profiles where user_id = '$U1'")" = active ] || fail "state changed on a refused request"
 pass "no credentials -> 401, wrong phrase -> 400, nothing changed"
 
+echo "--- the database step cannot be reached around the Edge Function"
+OUT=$(rest "$T3" POST rpc/begin_account_deletion '{}')
+echo "$OUT" | grep -q PGRST202 || fail "the removed zero-argument RPC is still reachable: $OUT"
+OUT=$(rest "$T3" POST rpc/begin_account_deletion "{\"p_user_id\":\"$U3\"}")
+echo "$OUT" | grep -q -i -e "permission denied" -e "42501" || fail "a signed-in user could call begin_account_deletion: $OUT"
+OUT=$(rest "$T3" POST rpc/begin_account_deletion "{\"p_user_id\":\"$U2\"}")
+echo "$OUT" | grep -q -i -e "permission denied" -e "42501" || fail "a signed-in user could target another account: $OUT"
+OUT=$(rest "$ANON" POST rpc/begin_account_deletion "{\"p_user_id\":\"$U3\"}")
+echo "$OUT" | grep -q -i -e "permission denied" -e "42501" || fail "anon could call begin_account_deletion: $OUT"
+[ "$(psql_ -c "select count(*) from profiles where user_id in ('$U1','$U2','$U3') and account_state = 'active'")" = 3 ] \
+  || fail "a refused direct call changed an account"
+pass "old RPC is gone; new RPC is refused for authenticated and anon (own and foreign id); nothing changed"
+
 echo "--- blocker: owners must hand over or delete their homes first"
 OUT=$(del_account "$T2")
 [ "$(echo "$OUT" | tail -1)" = 409 ] || fail "an owner was allowed to delete"

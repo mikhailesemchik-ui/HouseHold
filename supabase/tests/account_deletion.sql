@@ -26,6 +26,21 @@ END $$;
 CREATE FUNCTION pg_temp.as_admin() RETURNS void LANGUAGE plpgsql AS $$
 BEGIN EXECUTE 'RESET ROLE'; END $$;
 
+-- The trusted backend: no JWT identity, role service_role (the Edge Function).
+CREATE FUNCTION pg_temp.as_service() RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_config('request.jwt.claims', '', true);
+  EXECUTE 'RESET ROLE';
+  EXECUTE 'SET LOCAL ROLE service_role';
+END $$;
+
+CREATE FUNCTION pg_temp.as_anon() RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true);
+  EXECUTE 'RESET ROLE';
+  EXECUTE 'SET LOCAL ROLE anon';
+END $$;
+
 CREATE FUNCTION pg_temp.val(p_expr text) RETURNS text LANGUAGE plpgsql AS $$
 DECLARE v text;
 BEGIN
@@ -73,11 +88,17 @@ DECLARE
   b  uuid := 'fc000000-0000-0000-0000-00000000000c'; -- stays
   c  uuid := 'fc000000-0000-0000-0000-00000000000d'; -- deleted second
   x  uuid := 'fc000000-0000-0000-0000-00000000000e'; -- no profile
+  n1 uuid := 'fc000000-0000-0000-0000-000000000011'; -- hardening: profile creation
+  n2 uuid := 'fc000000-0000-0000-0000-000000000012';
+  n3 uuid := 'fc000000-0000-0000-0000-000000000013';
+  n4 uuid := 'fc000000-0000-0000-0000-000000000014';
+  n5 uuid := 'fc000000-0000-0000-0000-000000000015';
+  n6 uuid := 'fc000000-0000-0000-0000-000000000016';
   h1 uuid; h2 uuid; h3 uuid; h4 uuid; hz uuid; code1 text; code2 text;
   e1 uuid; e2 uuid; ex uuid; sx uuid; s1 uuid;
   ka uuid := 'cdcdcdcd-0000-4000-8000-0000000000a1';
   kb uuid := 'cdcdcdcd-0000-4000-8000-0000000000b1';
-  bal_h1 text; bal_h2 text; oth_h1 text; oth_h2 text; r text; snap text;
+  bal_h1 text; bal_h2 text; oth_h1 text; oth_h2 text; r text; snap text; pid_a text;
 BEGIN
   INSERT INTO auth.users (id,email,role,aud,created_at,updated_at,is_anonymous)
   SELECT id,'acc'||i||'@test.local','authenticated','authenticated',now(),now(),true
@@ -128,8 +149,10 @@ BEGIN
   PERFORM pg_temp.as_user(b); PERFORM join_household_by_invite(code1);
   PERFORM pg_temp.as_user(a);
   SELECT id INTO h4 FROM create_household('ACC SOLO OWN');
+  PERFORM pg_temp.as_service();
   PERFORM pg_temp.check('01 an owner of a shared household is blocked',
-    pg_temp.val('begin_account_deletion()') = 'err:AD002');
+    pg_temp.val(format('begin_account_deletion(%L)', a)) = 'err:AD002');
+  PERFORM pg_temp.as_user(a);
   PERFORM pg_temp.check('02 the blocker list names both owned homes with member counts',
     (SELECT count(*) FROM account_deletion_blockers()) = 2
     AND (SELECT active_member_count FROM account_deletion_blockers() WHERE name = 'ACC SOLO OWN') = 1);
@@ -150,8 +173,8 @@ BEGIN
   CREATE TRIGGER boom BEFORE DELETE ON device_push_tokens
     FOR EACH ROW EXECUTE FUNCTION pg_temp.boom();
   BEGIN
-    PERFORM pg_temp.as_user(a);
-    PERFORM begin_account_deletion();
+    PERFORM pg_temp.as_service();
+    PERFORM begin_account_deletion(a);
     PERFORM pg_temp.check('05 the failure test must fail', false);
   EXCEPTION WHEN SQLSTATE 'XX999' THEN NULL;
   END;
@@ -164,20 +187,42 @@ BEGIN
     AND (SELECT paid_by_display_name FROM expenses WHERE id = e1) = 'Acc2');
 
   -- Unauthorized / foreign requests
-  PERFORM pg_temp.as_user(x);
-  PERFORM pg_temp.check('06 a caller without a profile is refused',
-    pg_temp.val('begin_account_deletion()') = 'err:AD001');
+  PERFORM pg_temp.as_service();
+  PERFORM pg_temp.check('06 a target without a profile is refused',
+    pg_temp.val(format('begin_account_deletion(%L)', x)) = 'err:AD001'
+    AND pg_temp.val('begin_account_deletion(null::uuid)') = 'err:AD000');
   PERFORM pg_temp.as_admin();
-  PERFORM pg_temp.check('06b the function takes no target id, and finalize / reconcile are not callable by clients',
-    pg_temp.val('pg_get_function_arguments(''begin_account_deletion()''::regprocedure)') = ''
-    AND has_function_privilege('authenticated','finalize_account_deletion(uuid)','EXECUTE') = false
-    AND has_function_privilege('authenticated','reconcile_account_deletions()','EXECUTE') = false
-    AND has_function_privilege('anon','begin_account_deletion()','EXECUTE') = false
-    AND has_function_privilege('service_role','finalize_account_deletion(uuid)','EXECUTE'));
+  PERFORM pg_temp.check('06b only service_role may call begin / finalize / reconcile; the zero-argument form is gone',
+    to_regprocedure('begin_account_deletion()') IS NULL
+    AND pg_get_function_arguments('begin_account_deletion(uuid)'::regprocedure) = 'p_user_id uuid'
+    AND has_function_privilege('service_role','begin_account_deletion(uuid)','EXECUTE')
+    AND NOT has_function_privilege('authenticated','begin_account_deletion(uuid)','EXECUTE')
+    AND NOT has_function_privilege('anon','begin_account_deletion(uuid)','EXECUTE')
+    AND NOT has_function_privilege('public','begin_account_deletion(uuid)','EXECUTE')
+    AND NOT has_function_privilege('authenticated','finalize_account_deletion(uuid)','EXECUTE')
+    AND NOT has_function_privilege('authenticated','reconcile_account_deletions()','EXECUTE')
+    AND NOT has_function_privilege('anon','reconcile_account_deletions()','EXECUTE')
+    AND has_function_privilege('service_role','finalize_account_deletion(uuid)','EXECUTE')
+    AND has_function_privilege('service_role','reconcile_account_deletions()','EXECUTE')
+    AND NOT has_function_privilege('authenticated','_scrub_account_data(uuid)','EXECUTE'));
+
+  -- Clients cannot start a deletion themselves, for themselves or anyone else
+  PERFORM pg_temp.as_user(b);
+  PERFORM pg_temp.check('06c an authenticated user cannot call begin_account_deletion at all',
+    pg_temp.val(format('begin_account_deletion(%L)', b)) = 'err:42501'
+    AND pg_temp.val(format('begin_account_deletion(%L)', o)) = 'err:42501'
+    AND pg_temp.val('begin_account_deletion()') = 'err:42883');
+  PERFORM pg_temp.as_anon();
+  PERFORM pg_temp.check('06d anon cannot call it either',
+    pg_temp.val(format('begin_account_deletion(%L)', b)) = 'err:42501');
+  PERFORM pg_temp.as_admin();
+  PERFORM pg_temp.check('06e the refused calls changed nothing',
+    (SELECT count(*) FROM profiles WHERE user_id IN (o, b) AND account_state = 'active') = 2
+    AND EXISTS (SELECT 1 FROM household_members WHERE user_id = b AND status = 'active'));
 
   -- Delete a
-  PERFORM pg_temp.as_user(a);
-  r := begin_account_deletion();
+  PERFORM pg_temp.as_service();
+  r := begin_account_deletion(a);
   PERFORM pg_temp.as_admin();
   PERFORM pg_temp.check('07 deletion reports the deleting state and revokes every membership',
     r = 'deleting'
@@ -223,8 +268,10 @@ BEGIN
     AND EXISTS (SELECT 1 FROM device_push_tokens WHERE user_id = b)
     AND EXISTS (SELECT 1 FROM notification_outbox WHERE recipient_user_id = b));
   PERFORM pg_temp.check('16 the profile is a tombstone: no name, no avatar, public id replaced, same user id',
-    (SELECT display_name = 'Deleted member' AND avatar_url IS NULL AND public_id LIKE 'DELETED-%'
-        AND public_id <> 'ACC-2' FROM profiles WHERE user_id = a));
+    (SELECT display_name = 'Deleted member' AND avatar_url IS NULL
+        AND public_id ~ '^DELETED-[0-9a-f]{32}$'
+        AND public_id <> 'DELETED-' || replace(a::text, '-', '') FROM profiles WHERE user_id = a));
+  pid_a := (SELECT public_id FROM profiles WHERE user_id = a);
 
   -- An existing JWT of the deleting user has no access
   PERFORM pg_temp.as_user(a);
@@ -258,15 +305,26 @@ BEGIN
   PERFORM set_config('app.scrub_user', '', true);
   PERFORM pg_temp.check('21b ... even as the table owner the setting needs the privileged function context',
     pg_temp.rows(format($q$update financial_archive set canceled_by_name = 'x' where household_id = %L$q$, h1)) = 'err:HC003'
-    OR current_user = (SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.begin_account_deletion()'::regprocedure));
+    OR current_user = (SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE oid = 'public.begin_account_deletion(uuid)'::regprocedure));
+  -- service_role is the new caller of begin_account_deletion, but it is not the
+  -- privileged owner role: a forged setting gives it no scrub authority either.
+  PERFORM pg_temp.as_service();
+  PERFORM set_config('app.scrub_user', c::text, true);
+  PERFORM pg_temp.check('21c service_role with a forged scrub setting still cannot rewrite history',
+    pg_temp.rows(format($q$update financial_archive set canceled_by_name = 'x' where household_id = %L$q$, h1)) IN ('err:HC003', 'err:42501')
+    AND pg_temp.rows(format($q$update expenses set paid_by_display_name = 'Deleted member' where id = %L$q$, e2)) = 'err:HO029'
+    AND pg_temp.val(format('_scrubbing_user(%L)', c)) IN ('false', 'err:42501'));
+  PERFORM pg_temp.as_admin();
+  PERFORM set_config('app.scrub_user', '', true);
 
   -- Idempotent retry
-  PERFORM pg_temp.as_user(a);
-  r := begin_account_deletion();
+  PERFORM pg_temp.as_service();
+  r := begin_account_deletion(a);
   PERFORM pg_temp.as_admin();
-  PERFORM pg_temp.check('22 repeating the deletion is safe and changes nothing',
+  PERFORM pg_temp.check('22 repeating the deletion is safe, changes nothing and keeps the tombstone id',
     r = 'deleting' AND pg_temp.bal(h1) = bal_h1 AND pg_temp.others(h1) = oth_h1
-    AND (SELECT count(*) FROM financial_archive WHERE record_id = ex) = 1);
+    AND (SELECT count(*) FROM financial_archive WHERE record_id = ex) = 1
+    AND (SELECT public_id FROM profiles WHERE user_id = a) = pid_a);
 
   -- Other users keep full access
   PERFORM pg_temp.as_user(b);
@@ -280,11 +338,12 @@ BEGIN
     pg_temp.val(format($q$(create_settlement(%L,%L,%L,100,'EUR')).id$q$, h1, b, a)) LIKE 'err:HS%');
 
   -- Second deleted user stays distinct
-  PERFORM pg_temp.as_user(c);
-  PERFORM begin_account_deletion();
+  PERFORM pg_temp.as_service();
+  PERFORM begin_account_deletion(c);
   PERFORM pg_temp.as_admin();
   PERFORM pg_temp.check('24 two deleted users stay two distinct identities with unchanged balances',
     (SELECT count(DISTINCT user_id) FROM profiles WHERE user_id IN (a, c) AND display_name = 'Deleted member') = 2
+    AND (SELECT count(DISTINCT public_id) FROM profiles WHERE user_id IN (a, c)) = 2
     AND pg_temp.bal(h2) = bal_h2
     AND pg_temp.bal(h1) LIKE '%' || a::text || '%' AND pg_temp.bal(h1) LIKE '%' || c::text || '%');
 
@@ -340,6 +399,95 @@ BEGIN
     AND NOT EXISTS (SELECT 1 FROM financial_archive WHERE household_id = h1)
     AND EXISTS (SELECT 1 FROM households WHERE id = h2)
     AND EXISTS (SELECT 1 FROM profiles WHERE user_id IN (a, c)));
+
+  -- Hardening: profiles INSERT / UPDATE privileges
+  INSERT INTO auth.users (id,email,role,aud,created_at,updated_at,is_anonymous)
+  SELECT id,'hard'||i||'@test.local','authenticated','authenticated',now(),now(),true
+  FROM (VALUES (n1,1),(n2,2),(n3,3),(n4,4)) v(id,i);
+
+  PERFORM pg_temp.as_user(n1);
+  r := pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,'HARD-0001','User-HARD')$q$, n1));
+  PERFORM pg_temp.check('29 legitimate profile creation (user_id, public_id, display_name) still works',
+    r = '1' AND (SELECT account_state FROM profiles WHERE user_id = n1) = 'active');
+  r := pg_temp.rows(format($q$update profiles set display_name = 'Renamed', avatar_url = 'https://example.test/n1' where user_id = %L$q$, n1));
+  PERFORM pg_temp.check('29b ... and the client may edit its own name and avatar',
+    r = '1' AND (SELECT display_name FROM profiles WHERE user_id = n1) = 'Renamed');
+  PERFORM pg_temp.as_user(n2);
+  PERFORM pg_temp.check('30 a client cannot insert server-controlled state columns',
+    pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name,account_state) values (%L,'HARD-0002','x','deleting')$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name,account_state) values (%L,'HARD-0002','x','deleted')$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name,account_state) values (%L,'HARD-0002','x','active')$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name,deleted_at) values (%L,'HARD-0002','x',now())$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name,deletion_requested_at) values (%L,'HARD-0002','x',now())$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name,created_at) values (%L,'HARD-0002','x',now())$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name,avatar_url) values (%L,'HARD-0002','x','u')$q$, n2)) = 'err:42501');
+  PERFORM pg_temp.check('30b a client cannot create a profile for someone else',
+    pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,'HARD-0009','x')$q$, n3)) = 'err:42501');
+  r := pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,'HARD-0002','Two')$q$, n2));
+  PERFORM pg_temp.check('30c a client cannot update server-controlled columns of its own row',
+    r = '1'
+    AND pg_temp.rows(format($q$update profiles set account_state = 'deleting' where user_id = %L$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$update profiles set deleted_at = now() where user_id = %L$q$, n2)) = 'err:42501'
+    AND pg_temp.rows(format($q$update profiles set public_id = 'HARD-ZZZZ' where user_id = %L$q$, n2)) = 'err:42501'
+    AND (SELECT account_state FROM profiles WHERE user_id = n2) = 'active');
+  PERFORM pg_temp.check('30d a deleted tombstone cannot be re-created or taken over',
+    pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,'HARD-0010','x')$q$, a)) = 'err:42501'
+    AND pg_temp.rows(format($q$update profiles set display_name = 'mine' where user_id = %L$q$, a)) = '0');
+
+  -- Hardening: tombstone namespace
+  PERFORM pg_temp.as_user(n3);
+  PERFORM pg_temp.check('31 the old predictable tombstone id cannot be registered by a client',
+    pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,%L,'Squatter')$q$,
+      n3, 'DELETED-' || replace(n4::text, '-', ''))) = 'err:23514'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,%L,'Squatter')$q$,
+      n3, 'deleted-' || replace(n4::text, '-', ''))) = 'err:23514'
+    AND pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,'DELETED-anything','Squatter')$q$, n3)) = 'err:23514');
+  PERFORM pg_temp.as_admin();
+  PERFORM pg_temp.check('31b ... even for a privileged writer, an active profile may not use the prefix',
+    pg_temp.rows(format($q$insert into profiles (user_id,public_id,display_name) values (%L,'DELETED-x','Squatter')$q$, n3)) = 'err:23514');
+  INSERT INTO profiles (user_id,public_id,display_name) VALUES (n3,'HARD-0003','Three'),(n4,'HARD-0004','Four');
+  PERFORM pg_temp.as_service();
+  PERFORM begin_account_deletion(n3);
+  PERFORM begin_account_deletion(n4);
+  PERFORM pg_temp.as_admin();
+  PERFORM pg_temp.check('32 tombstone ids are random, well-formed and unique, never derived from the user id',
+    (SELECT count(DISTINCT public_id) FROM profiles WHERE user_id IN (n3, n4)) = 2
+    AND NOT EXISTS (SELECT 1 FROM profiles WHERE user_id IN (n3, n4)
+                    AND (public_id !~ '^DELETED-[0-9a-f]{32}$'
+                         OR public_id = 'DELETED-' || replace(user_id::text, '-', '')))
+    AND (SELECT account_state FROM profiles WHERE user_id = n3) = 'deleting');
+
+  -- A random-id collision is retried; persistent failure aborts atomically.
+  CREATE SEQUENCE pg_temp.collide;
+  CREATE FUNCTION pg_temp.collide() RETURNS trigger LANGUAGE plpgsql AS $f$
+  BEGIN
+    IF new.public_id LIKE 'DELETED-%' AND old.public_id NOT LIKE 'DELETED-%'
+       AND nextval('pg_temp.collide') <= tg_argv[0]::int THEN
+      RAISE EXCEPTION 'dup' USING errcode = '23505';
+    END IF;
+    RETURN new;
+  END $f$;
+  INSERT INTO auth.users (id,email,role,aud,created_at,updated_at,is_anonymous)
+    VALUES (n5,'hard5@test.local','authenticated','authenticated',now(),now(),true),
+           (n6,'hard6@test.local','authenticated','authenticated',now(),now(),true);
+  INSERT INTO profiles (user_id,public_id,display_name) VALUES (n5,'HARD-0005','Five'),(n6,'HARD-0006','Six');
+  CREATE TRIGGER collide BEFORE UPDATE OF public_id ON profiles
+    FOR EACH ROW EXECUTE FUNCTION pg_temp.collide(2);
+  PERFORM pg_temp.as_service();
+  r := begin_account_deletion(n5);
+  PERFORM pg_temp.as_admin();
+  PERFORM pg_temp.check('33 two simulated random collisions are retried and deletion succeeds',
+    r = 'deleting' AND (SELECT public_id FROM profiles WHERE user_id = n5) ~ '^DELETED-[0-9a-f]{32}$');
+  DROP TRIGGER collide ON profiles;
+  CREATE TRIGGER collide BEFORE UPDATE OF public_id ON profiles
+    FOR EACH ROW EXECUTE FUNCTION pg_temp.collide(1000);
+  PERFORM pg_temp.as_service();
+  r := pg_temp.val(format('begin_account_deletion(%L)', n6));
+  PERFORM pg_temp.as_admin();
+  DROP TRIGGER collide ON profiles;
+  PERFORM pg_temp.check('33b a persistent collision fails the whole deletion and leaves the account active',
+    r = 'err:23505' AND (SELECT account_state FROM profiles WHERE user_id = n6) = 'active'
+    AND (SELECT display_name FROM profiles WHERE user_id = n6) = 'Six');
 END $$;
 
 ROLLBACK;

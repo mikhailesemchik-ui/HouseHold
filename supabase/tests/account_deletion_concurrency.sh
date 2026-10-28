@@ -33,6 +33,16 @@ commit;
 SQL
 }
 
+as_service_sql() { # statement sleep-after (the trusted Edge Function role)
+  cat <<SQL
+begin;
+set local role service_role;
+$1;
+select pg_sleep($2) \g /dev/null
+commit;
+SQL
+}
+
 cleanup() {
   for H in $(psql_ -c "select id from households where name like 'ACCCONC %'"); do
     as_user_sql "$(psql_ -c "select user_id from household_members where household_id = '$H' and role = 'owner' and status = 'active' limit 1")" \
@@ -79,10 +89,10 @@ fail() { echo "FAIL: $1"; exit 1; }
 
 echo "--- test 1: two concurrent deletion requests for the same account"
 H=$(new_household 'ACCCONC 1' "$A")
-( as_user_sql "$A" "select 'first:' || begin_account_deletion()" 3 | psql_ > /tmp/ac1_a.out 2>&1 ) &
+( as_service_sql "select 'first:' || begin_account_deletion('$A')" 3 | psql_ > /tmp/ac1_a.out 2>&1 ) &
 PID=$!
 sleep 1.2
-as_user_sql "$A" "select 'second:' || begin_account_deletion()" 0 | psql_ > /tmp/ac1_b.out 2>&1 || true
+as_service_sql "select 'second:' || begin_account_deletion('$A')" 0 | psql_ > /tmp/ac1_b.out 2>&1 || true
 wait $PID
 grep -q "^first:deleting" /tmp/ac1_a.out && grep -q "^second:deleting" /tmp/ac1_b.out || fail "the requests did not both finish cleanly"
 ROWS=$(psql_ -c "select count(*) from household_members where user_id = '$A' and status = 'active'")
@@ -95,7 +105,7 @@ H=$(new_household 'ACCCONC 2' "$A2")
 CODE=$(as_user_sql "$O" "select (create_household_invite('$H')).code" 0 | psql_ | grep -E '^[A-Z0-9]{4}-[A-Z0-9]{4}$' | head -1)
 H2=$(new_household 'ACCCONC 2b')
 CODE2=$(as_user_sql "$O" "select (create_household_invite('$H2')).code" 0 | psql_ | grep -E '^[A-Z0-9]{4}-[A-Z0-9]{4}$' | head -1)
-( as_user_sql "$A2" "select 'deleted:' || begin_account_deletion()" 3 | psql_ > /tmp/ac2_a.out 2>&1 ) &
+( as_service_sql "select 'deleted:' || begin_account_deletion('$A2')" 3 | psql_ > /tmp/ac2_a.out 2>&1 ) &
 PID=$!
 sleep 1.2
 as_user_sql "$A2" "select join_household_by_invite('$CODE2')" 0 | psql_ > /tmp/ac2_b.out 2>&1 || true
@@ -110,7 +120,7 @@ H=$(new_household 'ACCCONC 3' "$A3")
 ( as_user_sql "$O" "select transfer_household_ownership('$H','$A3')" 3 | psql_ > /tmp/ac3_a.out 2>&1 ) &
 PID=$!
 sleep 1.2
-as_user_sql "$A3" "select begin_account_deletion()" 0 | psql_ > /tmp/ac3_b.out 2>&1 || true
+as_service_sql "select begin_account_deletion('$A3')" 0 | psql_ > /tmp/ac3_b.out 2>&1 || true
 wait $PID
 STATE=$(psql_ -c "select account_state from profiles where user_id = '$A3'")
 ROLE=$(psql_ -c "select role || ':' || status from household_members where household_id = '$H' and user_id = '$A3'")
@@ -127,12 +137,12 @@ echo "--- test 4: an expense in flight while the account is deleted"
 # delayed, and the name is already scrubbed before finalization, i.e. without
 # relying on finalize_account_deletion()'s second scrub pass.
 H=$(new_household 'ACCCONC 4' "$A")
-psql_ -c "update profiles set account_state = 'active', display_name = 'Ac2' where user_id = '$A'" >/dev/null
+psql_ -c "update profiles set account_state = 'active', display_name = 'Ac2', public_id = 'ACNC-2' where user_id = '$A'" >/dev/null
 ( as_user_sql "$A" "select create_equal_split_expense('$H','Race',1000,'EUR','$A',array['$A']::uuid[])" 3 | psql_ > /tmp/ac4_a.out 2>&1 ) &
 PID=$!
 sleep 1.2
 START=$(date +%s)
-as_user_sql "$A" "select 'deleted:' || begin_account_deletion()" 0 | psql_ > /tmp/ac4_b.out 2>&1 || true
+as_service_sql "select 'deleted:' || begin_account_deletion('$A')" 0 | psql_ > /tmp/ac4_b.out 2>&1 || true
 END=$(date +%s)
 wait $PID
 grep -q "^deleted:deleting" /tmp/ac4_b.out || fail "the deletion did not complete"
