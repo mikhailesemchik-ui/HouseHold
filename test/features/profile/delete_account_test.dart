@@ -26,7 +26,13 @@ class _FakeAccountRepository implements AccountRepository {
   Future<List<OwnedHousehold>> fetchBlockers() async => blockers;
 
   @override
-  Future<void> deleteAccount() async {
+  String? get currentUserId => 'user-1';
+
+  @override
+  Future<void> sendDeletionCode() async {}
+
+  @override
+  Future<void> deleteAccount({String? code}) async {
     deleteCalls++;
     if (gate != null) await gate!.future;
     if (failure != null) throw AccountDeletionException(failure!);

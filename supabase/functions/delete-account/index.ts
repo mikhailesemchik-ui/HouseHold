@@ -14,13 +14,36 @@
 //
 // A JWT stays technically valid after the Auth user is deleted, so the
 // database independently refuses a deleting / deleted account.
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+//
+// Email-linked accounts (F1b) must also prove control of their CONFIRMED email
+// with a fresh code, verified HERE against Supabase Auth on a separate,
+// non-persistent client. The email and the user id come from the caller's own
+// getUser() answer, never from the request body; the verification must return
+// that same user id. The session Auth issues for that verification is
+// discarded (and revoked) and never reaches the caller.
+//
+// KNOWN AUTH LIMITATION: Auth can accept one code more than once when
+// verifications run at the same time (see tests/delete_account_otp_preflight.sh).
+// The code is therefore proof of email control, not an exactly-once lock. That
+// is safe here because it can only ever authorize deleting the caller's own
+// account, and begin_account_deletion is serialized per user and idempotent, so
+// parallel requests converge on one deletion.
+//
+// An account that is already `deleting` was authorized earlier (only this
+// function, after the checks above, can put a profile there) and may resume
+// without a new code. An active linked account never can.
+import {
+  createClient,
+  type SupabaseClient,
+  type User,
+} from 'jsr:@supabase/supabase-js@2';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
 const CONFIRMATION_PHRASE = 'DELETE';
+const CODE_PATTERN = /^[0-9]{6}$/; // local Auth otp_length = 6
 
 function json(status: number, body: Record<string, unknown>): Response {
   return new Response(JSON.stringify(body), {
@@ -49,7 +72,7 @@ Deno.serve(async (request) => {
   const user = userData?.user;
   if (userError || !user) return json(401, { error: 'unauthorized' });
 
-  let body: { confirmation?: unknown } = {};
+  let body: { confirmation?: unknown; code?: unknown } = {};
   try {
     body = await request.json();
   } catch (_) {
@@ -59,16 +82,18 @@ Deno.serve(async (request) => {
     return json(400, { error: 'confirmation_required' });
   }
 
-  // Email-linked accounts (F1) must re-verify before deletion. Until that
-  // flow exists, refuse them instead of trusting a stale session.
-  if (!user.is_anonymous) {
-    return json(403, { error: 'reverification_required' });
-  }
-
   // Privileged client: service-role key only, never the caller's Authorization.
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+
+  // Email-linked accounts must re-verify their email (F1b). The decision uses
+  // only the Auth answer above and server-side data, never the request body.
+  if (!user.is_anonymous) {
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    const refusal = await requireReverification(admin, user, code);
+    if (refusal) return refusal;
+  }
 
   // 2. Database cleanup. Only service_role may call it; the target is the
   // verified Auth user, never a value from the request body.
@@ -102,3 +127,103 @@ Deno.serve(async (request) => {
   }
   return json(200, { state: 'deleted' });
 });
+
+// Returns a refusal, or null when this linked account may proceed to deletion.
+async function requireReverification(
+  admin: SupabaseClient,
+  user: User,
+  code: string,
+): Promise<Response | null> {
+  const email = user.email ?? '';
+  if (!email || !user.email_confirmed_at) {
+    return json(403, { error: 'reverification_unavailable' });
+  }
+
+  // Trusted server data: the profile of the verified caller.
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('account_state')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (profileError) {
+    console.error('profile state read failed', profileError.code);
+    return json(500, { error: 'state_unavailable' });
+  }
+  // Already prepared by an earlier, verified request: finish it.
+  if (profile?.account_state === 'deleting') return null;
+
+  // Optimization only: do not spend a code on a request that must fail with
+  // 409. begin_account_deletion stays the authoritative owner check.
+  const { count, error: ownerError } = await admin
+    .from('household_members')
+    .select('household_id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('role', 'owner')
+    .eq('status', 'active');
+  if (ownerError) {
+    console.error('owner pre-check failed', ownerError.code);
+    return json(500, { error: 'cleanup_failed', state: 'unknown' });
+  }
+  if ((count ?? 0) > 0) return json(409, { error: 'owns_households' });
+
+  if (code === '') return json(403, { error: 'reverification_required' });
+  if (!CODE_PATTERN.test(code)) {
+    return json(403, { error: 'verification_failed' });
+  }
+  return await verifyEmailCode(admin, user, email, code);
+}
+
+async function verifyEmailCode(
+  admin: SupabaseClient,
+  user: User,
+  email: string,
+  code: string,
+): Promise<Response | null> {
+  // Separate, non-persistent client: it cannot touch the caller's session.
+  const verifier = createClient(supabaseUrl, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+  try {
+    const { data, error } = await verifier.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email',
+    });
+    if (error) {
+      const status = error.status ?? 0;
+      const errorCode = (error as { code?: string }).code ?? '';
+      console.error('code verification failed', status, errorCode);
+      if (status === 429 || errorCode.startsWith('over_')) {
+        return json(429, { error: 'rate_limited' });
+      }
+      if (
+        status === 0 || status >= 500 || error.name === 'AuthRetryableFetchError'
+      ) {
+        return json(502, { error: 'verification_unavailable' });
+      }
+      return json(403, { error: 'verification_failed' });
+    }
+    // Whatever session this created is not ours to keep: revoke it and never
+    // hand it out.
+    const accessToken = data.session?.access_token;
+    if (accessToken) {
+      try {
+        await admin.auth.admin.signOut(accessToken, 'local');
+      } catch (_) {
+        // The session dies with the user; nothing else to do.
+      }
+    }
+    if (data.user?.id !== user.id) {
+      console.error('code verification returned a different user');
+      return json(403, { error: 'verification_failed' });
+    }
+    return null;
+  } catch (_) {
+    console.error('code verification threw');
+    return json(502, { error: 'verification_unavailable' });
+  }
+}
