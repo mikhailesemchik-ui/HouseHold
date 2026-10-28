@@ -511,7 +511,7 @@ Households: **Home**, **Parents**
 - `household_membership_periods` row created.
 
 **Notifications**
-- A (and any other existing active members) may receive a push notification ("B joined Home") if Household updates is enabled.
+- A (and any other existing active members) may receive a push notification if Household updates is enabled. The visible text is the generic "Household OS" / "You have a new update"; it never names B or the Home.
 - B does NOT receive a self-join push.
 
 **Verification**
@@ -706,7 +706,7 @@ Households: **Home**, **Parents**
 - Both `household_members` rows updated atomically.
 
 **Notifications**
-- B receives push: "You are now the owner of Home" (if Household updates enabled).
+- B receives a push (if Household updates enabled). The visible text is the generic "Household OS" / "You have a new update"; it does not name the Home.
 
 **Verification**
 - Automated coverage: None (RPC requires real Supabase)
@@ -739,7 +739,7 @@ Households: **Home**, **Parents**
 - Completed historical occurrences for B remain unchanged.
 
 **Notifications**
-- B receives push: "You were removed from Home" (if Household updates enabled).
+- B receives a push (if Household updates enabled). The visible text is the generic "Household OS" / "You have a new update"; it does not name the Home.
 - Tapping push opens `/homes` (Homes list), NOT the inaccessible Home dashboard.
 
 **Verification**

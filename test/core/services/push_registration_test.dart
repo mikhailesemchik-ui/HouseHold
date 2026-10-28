@@ -19,7 +19,9 @@ class _Tokens implements PushTokenProvider {
   Future<String?> getToken() async => token;
 }
 
-/// A fake server: the rows of `device_push_tokens` keyed by (user, token).
+/// A fake server with the real ownership rule: one owner per token. Rows are
+/// 'owner|token'. Registering moves the token to the signed-in user; releasing
+/// removes it from everyone else without registering it for the caller.
 class _Rig {
   _Rig({String? signedInAs = _a, String token = 'tok-1', this.deletionOf})
     : signedIn = signedInAs,
@@ -29,11 +31,19 @@ class _Rig {
       tokenProvider: tokens,
       registerToken: (token, platform) async {
         if (failRegister) throw StateError('offline');
+        rows.removeWhere((r) => r.endsWith('|$token'));
         rows.add('$signedIn|$token');
       },
       unregisterToken: (token) async {
         if (failUnregister) throw StateError('offline');
-        rows.remove('$signedIn|$token');
+        rows.remove('$signedIn|$token'); // row level security: own rows only
+      },
+      releaseForeignRegistrations: (token, platform) async {
+        if (failRelease) throw StateError('offline');
+        releases++;
+        rows.removeWhere(
+          (r) => r.endsWith('|$token') && !r.startsWith('$signedIn|'),
+        );
       },
       isDeletionPending: (id) async => id == deletionOf,
     );
@@ -43,8 +53,10 @@ class _Rig {
   final _Tokens tokens;
   final String? deletionOf;
   final rows = <String>{};
+  int releases = 0;
   bool failRegister = false;
   bool failUnregister = false;
+  bool failRelease = false;
   late final PushRegistrationSync sync;
 }
 
@@ -112,37 +124,60 @@ void main() {
       await rig.sync.ensureRegistered(_a);
       await rig.sync.ensureRegistered(_a);
       expect(rig.rows, {'$_a|tok-1'});
+      expect(rig.releases, 0);
       expect(
         await HouseholdUpdatesPushSettings.forUser(_a).lastRegisteredToken(),
         'tok-1',
       );
     });
 
-    test('a user who did not opt in gets nothing, even if another user did on '
-        'this device', () async {
-      final rig = _Rig(signedInAs: _b);
-      await _optIn(_a);
-      await rig.sync.ensureRegistered(_b);
-      expect(rig.rows, isEmpty);
-    });
+    test(
+      'a user who did not opt in registers nothing but RELEASES the previous '
+      'owner (a stale registration of an account that lost its session)',
+      () async {
+        final rig = _Rig(signedInAs: _b);
+        rig.rows.add('$_a|tok-1'); // left behind when A\'s session was revoked
+        await _optIn(_a);
+        await rig.sync.ensureRegistered(_b);
+        expect(rig.rows, isEmpty, reason: 'A\'s private notifications stop');
+        expect(rig.releases, 1);
+        expect(
+          await HouseholdUpdatesPushSettings.forUser(_b).lastRegisteredToken(),
+          isNull,
+        );
+      },
+    );
 
-    test('the new user receives notifications once they have opted in, and the '
-        'previous user\'s registration is not reused', () async {
-      final rig = _Rig();
-      await _optIn(_a);
-      await rig.sync.ensureRegistered(_a);
-      // approved switch: A's registration is removed under A's session
-      rig.rows.remove('$_a|tok-1');
-      await HouseholdUpdatesPushSettings.forUser(
-        _a,
-      ).setLastRegisteredToken(null);
-      rig.signedIn = _b;
-      await rig.sync.ensureRegistered(_b);
-      expect(rig.rows, isEmpty, reason: 'B has not opted in');
-      await _optIn(_b);
-      await rig.sync.ensureRegistered(_b);
-      expect(rig.rows, {'$_b|tok-1'});
-    });
+    test(
+      'an opted-in new user takes the token over from the stale owner',
+      () async {
+        final rig = _Rig(signedInAs: _b);
+        rig.rows.add('$_a|tok-1');
+        await _optIn(_b);
+        await rig.sync.ensureRegistered(_b);
+        expect(rig.rows, {'$_b|tok-1'});
+      },
+    );
+
+    test(
+      'the new user opts in later; the previous owner never comes back',
+      () async {
+        final rig = _Rig();
+        await _optIn(_a);
+        await rig.sync.ensureRegistered(_a);
+        // approved switch: A\'s registration is removed under A\'s session
+        rig.rows.remove('$_a|tok-1');
+        await HouseholdUpdatesPushSettings.forUser(
+          _a,
+        ).setLastRegisteredToken(null);
+        rig.signedIn = _b;
+        await rig.sync.ensureRegistered(_b);
+        expect(rig.rows, isEmpty);
+        await _optIn(_b);
+        await rig.sync.ensureRegistered(_b);
+        expect(rig.rows, {'$_b|tok-1'});
+      },
+    );
 
     test(
       'A returning later is registered again from A\'s own opt-in',
@@ -159,34 +194,46 @@ void main() {
       final rig = _Rig();
       await _optIn(_a);
       await rig.sync.ensureRegistered(_a);
-      rig.rows.add('$_b|someone-elses'); // another user's row is never touched
+      rig.rows.add('$_b|someone-elses'); // another user\'s device
       rig.tokens.token = 'tok-2';
       await rig.sync.ensureRegistered(_a);
       expect(rig.rows, {'$_a|tok-2', '$_b|someone-elses'});
     });
 
-    test('nothing is registered if the session changed meanwhile', () async {
-      final rig = _Rig(signedInAs: _b);
-      await _optIn(_a);
-      await rig.sync.ensureRegistered(_a); // caller asked for A, session is B
-      expect(rig.rows, isEmpty);
-    });
+    test(
+      'nothing is registered or released if the session changed meanwhile',
+      () async {
+        final rig = _Rig(signedInAs: _b);
+        await _optIn(_a);
+        rig.rows.add('$_a|tok-1');
+        await rig.sync.ensureRegistered(_a); // caller asked for A, session is B
+        expect(rig.rows, {'$_a|tok-1'});
+        expect(rig.releases, 0);
+      },
+    );
 
-    test('an unresolved account deletion blocks registration', () async {
-      final rig = _Rig(deletionOf: _a);
-      await _optIn(_a);
-      await rig.sync.ensureRegistered(_a);
-      expect(rig.rows, isEmpty);
-    });
+    test(
+      'an unresolved account deletion blocks registration and release',
+      () async {
+        final rig = _Rig(deletionOf: _a);
+        await _optIn(_a);
+        await rig.sync.ensureRegistered(_a);
+        expect(rig.rows, isEmpty);
+        expect(rig.releases, 0);
+      },
+    );
 
-    test('no token available (permission off) registers nothing and asks for '
-        'nothing', () async {
-      final rig = _Rig();
-      rig.tokens.token = null;
-      await _optIn(_a);
-      await rig.sync.ensureRegistered(_a);
-      expect(rig.rows, isEmpty);
-    });
+    test(
+      'no token available (permission off) registers and releases nothing',
+      () async {
+        final rig = _Rig();
+        rig.tokens.token = null;
+        await _optIn(_a);
+        await rig.sync.ensureRegistered(_a);
+        expect(rig.rows, isEmpty);
+        expect(rig.releases, 0);
+      },
+    );
 
     test(
       'a failed registration is thrown, never reported as success',
@@ -201,5 +248,12 @@ void main() {
         );
       },
     );
+
+    test('a failed release is thrown too', () async {
+      final rig = _Rig(signedInAs: _b)..failRelease = true;
+      rig.rows.add('$_a|tok-1');
+      await expectLater(rig.sync.ensureRegistered(_b), throwsStateError);
+      expect(rig.rows, {'$_a|tok-1'}, reason: 'nothing was claimed to be done');
+    });
   });
 }

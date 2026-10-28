@@ -63,19 +63,13 @@ void main() {
 
     test('registers current device token and removes rotated token', () async {
       final store = _FakeStore(token: 'old-token');
-      final registrations = <DevicePushTokenRegistration>[];
+      final registrations = <({String token, String platform})>[];
       String? unregisteredToken;
       final controller = HouseholdUpdatesPushController(
         tokenProvider: const _FakeTokenProvider(token: 'new-token'),
         preferenceStore: store,
         registerToken: (token, platform) async {
-          registrations.add(
-            DevicePushTokenRegistration(
-              userId: 'current-user',
-              token: token,
-              platform: platform,
-            ),
-          );
+          registrations.add((token: token, platform: platform));
         },
         unregisterToken: (token) async => unregisteredToken = token,
         requestPermission: () async => true,
@@ -87,11 +81,7 @@ void main() {
       expect(store.enabled, isTrue);
       expect(store.token, 'new-token');
       expect(unregisteredToken, 'old-token');
-      expect(registrations.single.toMap(), {
-        'user_id': 'current-user',
-        'token': 'new-token',
-        'platform': 'android',
-      });
+      expect(registrations.single, (token: 'new-token', platform: 'android'));
     });
 
     test('does not enable when permission is denied', () async {
@@ -148,22 +138,6 @@ void main() {
       expect(enabled, isFalse);
       expect(store.enabled, isFalse);
       expect(registered, isFalse);
-    });
-  });
-
-  group('DevicePushTokenRegistration', () {
-    test('payload uses supplied current user only', () {
-      const registration = DevicePushTokenRegistration(
-        userId: 'current-user',
-        token: 'device-token',
-        platform: 'ios',
-      );
-
-      expect(registration.toMap(), {
-        'user_id': 'current-user',
-        'token': 'device-token',
-        'platform': 'ios',
-      });
     });
   });
 

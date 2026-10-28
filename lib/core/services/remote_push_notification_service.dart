@@ -7,24 +7,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'household_updates_push_settings.dart';
 import 'remote_notification_payload.dart';
 
-class DevicePushTokenRegistration {
-  const DevicePushTokenRegistration({
-    required this.userId,
-    required this.token,
-    required this.platform,
-  });
-
-  final String userId;
-  final String token;
-  final String platform;
-
-  Map<String, Object?> toMap() => {
-    'user_id': userId,
-    'token': token,
-    'platform': platform,
-  };
-}
-
 abstract class PushTokenProvider {
   Future<String?> getToken();
 
@@ -60,21 +42,30 @@ class SupabaseDevicePushTokenRegistrar {
 
   final SupabaseClient _client;
 
+  /// Makes this installation's token the signed-in user's. The server takes
+  /// the user from the session (never from here), refuses inactive accounts,
+  /// and moves the token away from any other user, so one token never has two
+  /// owners.
   Future<void> registerCurrentUserToken({
     required String token,
     required String platform,
-  }) async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) throw StateError('Not authenticated');
-
-    final registration = DevicePushTokenRegistration(
-      userId: userId,
-      token: token,
-      platform: platform,
+  }) {
+    return _client.rpc(
+      'register_device_push_token',
+      params: {'p_token': token, 'p_platform': platform, 'p_register': true},
     );
-    await _client
-        .from('device_push_tokens')
-        .upsert(registration.toMap(), onConflict: 'user_id,token');
+  }
+
+  /// For a user who has NOT opted in: removes this token from whoever else
+  /// holds it, and registers nothing for the signed-in user.
+  Future<void> releaseForeignRegistrations({
+    required String token,
+    required String platform,
+  }) {
+    return _client.rpc(
+      'register_device_push_token',
+      params: {'p_token': token, 'p_platform': platform, 'p_register': false},
+    );
   }
 
   Future<void> unregisterCurrentUserToken(String token) async {

@@ -24,6 +24,8 @@ final pushRegistrationSyncProvider = Provider<PushRegistrationSync>((ref) {
     registerToken: (token, platform) =>
         registrar.registerCurrentUserToken(token: token, platform: platform),
     unregisterToken: registrar.unregisterCurrentUserToken,
+    releaseForeignRegistrations: (token, platform) =>
+        registrar.releaseForeignRegistrations(token: token, platform: platform),
     isDeletionPending: (userId) async {
       final prefs = await SharedPreferences.getInstance();
       return AccountLocalCleanup(prefs).markedUserId == userId;
