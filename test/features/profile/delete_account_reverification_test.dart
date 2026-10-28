@@ -150,6 +150,11 @@ void main() {
         AccountDeletionFailure.rateLimited,
       );
       expect(
+        f(429, {'error': 'too_many_attempts'}),
+        AccountDeletionFailure.tooManyAttempts,
+      );
+      expect(f(429), AccountDeletionFailure.rateLimited);
+      expect(
         f(502, {'error': 'verification_unavailable'}),
         AccountDeletionFailure.verificationUnavailable,
       );
@@ -267,6 +272,25 @@ void main() {
       expect(find.textContaining("couldn't check the code"), findsOneWidget);
       expect(repo.signOutCalls, 0);
     });
+
+    testWidgets(
+      'an exhausted attempt limit is explained calmly, nothing starts',
+      (tester) async {
+        final repo = _LinkedRepository(
+          results: [AccountDeletionFailure.tooManyAttempts],
+        );
+        await _pump(tester, repo);
+        await _toCodeStep(tester);
+        await _submitCode(tester, '111111');
+        expect(
+          find.text('Too many verification attempts. Please try again later.'),
+          findsOneWidget,
+        );
+        expect(repo.codesSent, 1, reason: 'no new email is requested for it');
+        expect(repo.signOutCalls, 0);
+        expect(find.text('HOMES SCREEN'), findsNothing);
+      },
+    );
 
     testWidgets('a failed email send is explained and can be repeated', (
       tester,

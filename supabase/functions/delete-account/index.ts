@@ -29,6 +29,11 @@
 // account, and begin_account_deletion is serialized per user and idempotent, so
 // parallel requests converge on one deletion.
 //
+// Each verification attempt is also limited per user in the database
+// (reserve_deletion_code_attempt, migration 20261109000001); that limit does
+// not revoke a code Auth already issued and does not fix the concurrent
+// acceptance above.
+//
 // An account that is already `deleting` was authorized earlier (only this
 // function, after the checks above, can put a profile there) and may resume
 // without a new code. An active linked account never can.
@@ -45,10 +50,14 @@ const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const CONFIRMATION_PHRASE = 'DELETE';
 const CODE_PATTERN = /^[0-9]{6}$/; // local Auth otp_length = 6
 
-function json(status: number, body: Record<string, unknown>): Response {
+function json(
+  status: number,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
 }
 
@@ -167,10 +176,51 @@ async function requireReverification(
   if ((count ?? 0) > 0) return json(409, { error: 'owns_households' });
 
   if (code === '') return json(403, { error: 'reverification_required' });
+  // A malformed code never reaches Auth, so it does not use an attempt.
   if (!CODE_PATTERN.test(code)) {
     return json(403, { error: 'verification_failed' });
   }
+
+  // Reserve an attempt for THIS user BEFORE asking Auth, atomically in the
+  // database (5 per 15 minutes, every submission counts). Checking first and
+  // counting afterwards would let parallel requests slip past the limit. Auth's
+  // own limit is per source IP, which here is this function for every user.
+  // Any problem with the limiter fails closed: Auth is not contacted.
+  const reservation = await reserveCodeAttempt(admin, user.id);
+  if (reservation === null) {
+    return json(502, { error: 'verification_unavailable' });
+  }
+  if (!reservation.allowed) {
+    return json(
+      429,
+      { error: 'too_many_attempts' },
+      { 'Retry-After': String(reservation.retryAfterSeconds) },
+    );
+  }
   return await verifyEmailCode(admin, user, email, code);
+}
+
+// Null means the limiter could not give a trustworthy answer.
+async function reserveCodeAttempt(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<{ allowed: boolean; retryAfterSeconds: number } | null> {
+  const { data, error } = await admin.rpc('reserve_deletion_code_attempt', {
+    p_user_id: userId,
+  });
+  if (error) {
+    console.error('attempt reservation failed', error.code);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row.allowed !== 'boolean') {
+    console.error('attempt reservation gave an unexpected answer');
+    return null;
+  }
+  return {
+    allowed: row.allowed,
+    retryAfterSeconds: Math.max(1, Number(row.retry_after_seconds) || 1),
+  };
 }
 
 async function verifyEmailCode(

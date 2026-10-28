@@ -28,6 +28,10 @@ enum AccountDeletionFailure {
   /// Too many verification attempts; wait and try again. Nothing was started.
   rateLimited,
 
+  /// This account used up its verification attempts for now (HTTP 429 from our
+  /// own per-user limit). Nothing was started; no new email helps until it ends.
+  tooManyAttempts,
+
   /// The code could not be checked right now. Nothing was started.
   verificationUnavailable,
 
@@ -46,7 +50,11 @@ extension AccountDeletionFailureX on AccountDeletionFailure {
 AccountDeletionFailure accountDeletionFailureFor(int status, Object? details) {
   final key = details is Map ? details['error'] : null;
   if (status == 409) return AccountDeletionFailure.ownsHouseholds;
-  if (status == 429) return AccountDeletionFailure.rateLimited;
+  if (status == 429) {
+    return key == 'too_many_attempts'
+        ? AccountDeletionFailure.tooManyAttempts
+        : AccountDeletionFailure.rateLimited;
+  }
   if (status == 403) {
     return switch (key) {
       'reverification_required' => AccountDeletionFailure.verificationRequired,

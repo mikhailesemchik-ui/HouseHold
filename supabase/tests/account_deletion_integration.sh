@@ -55,6 +55,9 @@ commit;
 SQL
   done
   psql_ -c "drop trigger if exists zz_block_auth_delete on auth.users" >/dev/null 2>&1 || true
+  psql_ -c "drop trigger if exists zz_block_attempts on deletion_code_attempts" >/dev/null 2>&1 || true
+  psql_ -c "drop trigger if exists zz_block_prepare on profiles" >/dev/null 2>&1 || true
+  psql_ -c "drop trigger if exists zz_block_finalize on profiles" >/dev/null 2>&1 || true
   for U in "${USERS[@]}"; do
     psql_ <<SQL >/dev/null 2>&1 || true
 delete from household_members where user_id = '$U';
@@ -411,3 +414,118 @@ N=$(cx -s -X POST "$API_URL/rest/v1/rpc/reconcile_account_deletions" -H "apikey:
 [ "$N" -ge 1 ] && [ "$(state_of "$L10")" = deleted ] || fail "reconciliation did not close the account (closed $N)"
 [ "$(state_of "$L1")" = active ] || fail "reconciliation touched an active account"
 pass "[real Auth+function] finalize failure -> 502, Auth user gone; trusted reconciliation closes exactly the orphaned account"
+
+echo "--- F1b limiter: 5 verification submissions per user per 15 minutes (real Auth + real Edge Function)"
+attempts_of() { psql_ -c "select coalesce((select attempt_count from deletion_code_attempts where user_id = '$1'), 0)"; }
+wrong_for() { # a 6-digit code that is not $1
+  [ "$1" = 000007 ] && echo 000008 || echo 000007
+}
+
+echo "- exhausting the limit: the next submission is refused before Auth, even with the right code"
+make_linked M1; M1=$LID; M1E=$LEMAIL; M1T=$LTOKEN
+CM1=$(fresh_code "$M1E")
+for n in 1 2 3 4 5; do
+  W=$(printf '%06d' $((n + 100)))
+  [ "$W" = "$CM1" ] && W=000999
+  OUT=$(del_account "$M1T" "{\"confirmation\":\"DELETE\",\"code\":\"$W\"}")
+  [ "$(http_of "$OUT")" = 403 ] && body_of "$OUT" | grep -q verification_failed || fail "wrong submission $n was not processed as a failed check: $OUT"
+done
+[ "$(attempts_of "$M1")" = 5 ] || fail "five submissions were not counted (count $(attempts_of "$M1"))"
+OUT=$(del_account "$M1T" "{\"confirmation\":\"DELETE\",\"code\":\"$CM1\"}")
+[ "$(http_of "$OUT")" = 429 ] && body_of "$OUT" | grep -q too_many_attempts || fail "the sixth submission was not limited: $OUT"
+[ "$(state_of "$M1")" = active ] && [ "$(auth_rows "$M1")" = 1 ] || fail "the limited request changed the account"
+[ "$(attempts_of "$M1")" = 5 ] || fail "a refused submission changed the count"
+[ "$(verify_status "$M1E" "$CM1")" = 200 ] || fail "the correct code was consumed, so Auth was contacted after the limit (or it expired)"
+pass "[real Auth+function] 5 wrong submissions -> 403 each; the 6th, carrying the CORRECT code, -> 429 without deleting; the code was never presented to Auth; account intact"
+
+echo "- another user is unaffected, and the same user recovers when the window ends"
+make_linked M2; M2=$LID; M2E=$LEMAIL; M2T=$LTOKEN
+C=$(fresh_code "$M2E")
+OUT=$(del_account "$M2T" "{\"confirmation\":\"DELETE\",\"code\":\"$C\"}")
+[ "$(http_of "$OUT")" = 200 ] && [ "$(state_of "$M2")" = deleted ] || fail "a different user was affected by M1's limit: $OUT"
+# Age the window as the table owner (no bypass exists in the function).
+psql_ -c "update deletion_code_attempts set window_started_at = now() - interval '16 minutes' where user_id = '$M1'" >/dev/null
+CM1B=$(fresh_code "$M1E")
+OUT=$(del_account "$M1T" "{\"confirmation\":\"DELETE\",\"code\":\"$CM1B\"}")
+[ "$(http_of "$OUT")" = 200 ] && [ "$(state_of "$M1")" = deleted ] && [ "$(auth_rows "$M1")" = 0 ] || fail "the user could not delete after the window passed: $OUT"
+pass "[real Auth+function] a different user deletes normally while M1 is limited; after the window passes M1 deletes with a fresh code"
+
+echo "- ten simultaneous wrong-code submissions cannot all reach Auth"
+make_linked M3; M3=$LID; M3E=$LEMAIL; M3T=$LTOKEN
+CM3=$(fresh_code "$M3E"); WR=$(wrong_for "$CM3")
+FLOOD=$(mktemp -d)
+PIDS=()
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  (del_account "$M3T" "{\"confirmation\":\"DELETE\",\"code\":\"$WR\"}" > "$FLOOD/r$i" 2>&1) & PIDS+=($!)
+done
+wait "${PIDS[@]}"
+N403=0; N429=0; OTHER=0
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  case "$(http_of "$(cat "$FLOOD/r$i")")" in 403) N403=$((N403 + 1));; 429) N429=$((N429 + 1));; *) OTHER=$((OTHER + 1));; esac
+done
+rm -rf "$FLOOD"
+echo "statuses: 403 (reached Auth)=$N403  429 (refused first)=$N429  other=$OTHER"
+[ "$N403" = 5 ] && [ "$N429" = 5 ] && [ "$OTHER" = 0 ] || fail "expected exactly 5 to reach Auth and 5 to be refused"
+[ "$(attempts_of "$M3")" = 5 ] && [ "$(state_of "$M3")" = active ] || fail "state after the flood is wrong"
+pass "[real Auth+function] 10 simultaneous wrong-code submissions: exactly 5 reached Auth, 5 were refused with 429; account intact"
+
+echo "- a deleting account resumes without a code even when the limit is exhausted"
+make_linked M4; M4=$LID; M4E=$LEMAIL; M4T=$LTOKEN
+psql_ <<SQL >/dev/null
+create or replace function zz_block_auth_delete() returns trigger language plpgsql as \$f\$
+begin raise exception 'blocked for test' using errcode = 'XX998'; end \$f\$;
+create trigger zz_block_auth_delete before delete on auth.users for each row execute function zz_block_auth_delete();
+SQL
+C=$(fresh_code "$M4E")
+OUT=$(del_account "$M4T" "{\"confirmation\":\"DELETE\",\"code\":\"$C\"}")
+[ "$(http_of "$OUT")" = 502 ] && [ "$(state_of "$M4")" = deleting ] || fail "setup: Auth failure not left deleting: $OUT"
+psql_ -c "update deletion_code_attempts set attempt_count = 5 where user_id = '$M4'; drop trigger zz_block_auth_delete on auth.users; drop function zz_block_auth_delete()" >/dev/null
+OUT=$(del_account "$M4T")
+[ "$(http_of "$OUT")" = 200 ] && [ "$(state_of "$M4")" = deleted ] || fail "the resume was blocked by the limiter: $OUT"
+pass "[real Auth+function] with the limit exhausted, a deleting account still resumes without a code"
+
+echo "- anonymous deletion never touches the limiter; owners still get 409 without using an attempt"
+read -r UAN TAN RAN <<<"$(new_user)"; USERS+=("$UAN")
+OUT=$(del_account "$TAN")
+[ "$(http_of "$OUT")" = 200 ] && [ "$(attempts_of "$UAN")" = 0 ] || fail "anonymous deletion used the limiter or failed: $OUT"
+[ "$(attempts_of "$L5")" = 0 ] || fail "the owner pre-check used an attempt"
+pass "[real Auth+function] anonymous deletion -> 200 with no limiter row; the earlier owner 409 consumed no attempt"
+
+echo "- limiter database failure fails closed: no Auth call, no deletion"
+make_linked M5; M5=$LID; M5E=$LEMAIL; M5T=$LTOKEN
+psql_ <<SQL >/dev/null
+create or replace function zz_block_attempts() returns trigger language plpgsql as \$f\$
+begin raise exception 'blocked for test' using errcode = 'XX996'; end \$f\$;
+create trigger zz_block_attempts before insert or update on deletion_code_attempts for each row execute function zz_block_attempts();
+SQL
+C=$(fresh_code "$M5E")
+OUT=$(del_account "$M5T" "{\"confirmation\":\"DELETE\",\"code\":\"$C\"}")
+psql_ -c "drop trigger zz_block_attempts on deletion_code_attempts; drop function zz_block_attempts()" >/dev/null
+[ "$(http_of "$OUT")" = 502 ] && body_of "$OUT" | grep -q verification_unavailable || fail "a limiter failure was not reported safely: $OUT"
+[ "$(state_of "$M5")" = active ] && [ "$(auth_rows "$M5")" = 1 ] || fail "a limiter failure changed the account"
+[ "$(verify_status "$M5E" "$C")" = 200 ] || fail "the code was consumed although the limiter failed"
+pass "[real Auth+function] limiter failure -> 502 verification_unavailable; Auth was not asked (the code is still unspent); account active"
+
+echo "- a failed deletion preparation does not reset or bypass the limit"
+make_linked M6; M6=$LID; M6E=$LEMAIL; M6T=$LTOKEN
+psql_ <<SQL >/dev/null
+create or replace function zz_block_prepare() returns trigger language plpgsql as \$f\$
+begin
+  if new.account_state = 'deleting' then raise exception 'blocked for test' using errcode = 'XX995'; end if;
+  return new;
+end \$f\$;
+create trigger zz_block_prepare before update on profiles for each row execute function zz_block_prepare();
+SQL
+for n in 1 2; do
+  C=$(fresh_code "$M6E")
+  OUT=$(del_account "$M6T" "{\"confirmation\":\"DELETE\",\"code\":\"$C\"}")
+  [ "$(http_of "$OUT")" = 500 ] || { psql_ -c "drop trigger zz_block_prepare on profiles; drop function zz_block_prepare()" >/dev/null; fail "preparation failure not reported (try $n): $OUT"; }
+  [ "$(attempts_of "$M6")" = "$n" ] || { psql_ -c "drop trigger zz_block_prepare on profiles; drop function zz_block_prepare()" >/dev/null; fail "attempt $n was not counted after a failed preparation"; }
+done
+psql_ -c "drop trigger zz_block_prepare on profiles; drop function zz_block_prepare()" >/dev/null
+[ "$(state_of "$M6")" = active ] || fail "a failed preparation changed the account"
+pass "[real Auth+function] a verified code whose deletion could not be prepared still counts (1, then 2); the account stays active"
+
+echo "- unrelated accounts are untouched by all of the above"
+[ "$(state_of "$UB")" = active ] && [ "$(state_of "$UO")" = active ] && [ "$(state_of "$L1")" = active ] || fail "an unrelated account changed"
+pass "[real Auth+function] bystanders (anonymous owner, bystander, L1) are still active"

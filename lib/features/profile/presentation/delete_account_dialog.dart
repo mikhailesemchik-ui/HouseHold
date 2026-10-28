@@ -17,6 +17,8 @@ String _failureMessage(AccountDeletionFailure failure) => switch (failure) {
     "That code didn't work. Check it, or request a new one.",
   AccountDeletionFailure.rateLimited =>
     'Too many attempts. Please wait a moment and try again.',
+  AccountDeletionFailure.tooManyAttempts =>
+    'Too many verification attempts. Please try again later.',
   AccountDeletionFailure.verificationUnavailable =>
     "We couldn't check the code right now. Try again in a moment.",
   AccountDeletionFailure.sessionChanged =>
