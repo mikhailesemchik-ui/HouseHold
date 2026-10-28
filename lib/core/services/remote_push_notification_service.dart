@@ -101,22 +101,23 @@ abstract class HouseholdUpdatesPushPreferenceStore {
 
 class SharedPreferencesHouseholdUpdatesPushPreferenceStore
     implements HouseholdUpdatesPushPreferenceStore {
-  const SharedPreferencesHouseholdUpdatesPushPreferenceStore();
+  SharedPreferencesHouseholdUpdatesPushPreferenceStore(String userId)
+    : _settings = HouseholdUpdatesPushSettings.forUser(userId);
+
+  final HouseholdUpdatesPushSettings _settings;
 
   @override
-  Future<bool> isEnabled() => HouseholdUpdatesPushSettings.isEnabled();
+  Future<bool> isEnabled() => _settings.isEnabled();
 
   @override
-  Future<void> setEnabled(bool value) =>
-      HouseholdUpdatesPushSettings.setEnabled(value);
+  Future<void> setEnabled(bool value) => _settings.setEnabled(value);
 
   @override
-  Future<String?> lastRegisteredToken() =>
-      HouseholdUpdatesPushSettings.lastRegisteredToken();
+  Future<String?> lastRegisteredToken() => _settings.lastRegisteredToken();
 
   @override
   Future<void> setLastRegisteredToken(String? token) =>
-      HouseholdUpdatesPushSettings.setLastRegisteredToken(token);
+      _settings.setLastRegisteredToken(token);
 }
 
 class HouseholdUpdatesPushController {

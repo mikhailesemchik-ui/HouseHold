@@ -59,6 +59,9 @@ Future<void> startAccountDeletion(
   if (deleted != true) return;
 
   await cleanup.finish(userId, repo);
+  // Ending the session replaces the user-scoped root; if that already
+  // happened there is nothing left to refresh or navigate.
+  if (!context.mounted) return;
   ref.invalidate(currentProfileProvider);
   ref.invalidate(homesProvider);
   if (context.mounted) context.go('/homes');

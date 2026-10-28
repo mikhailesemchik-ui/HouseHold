@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:household_os/app/app.dart';
 import 'package:household_os/features/profile/domain/profile.dart';
-import 'package:household_os/features/profile/presentation/profile_provider.dart';
+import 'package:household_os/features/startup/presentation/startup_provider.dart';
 import 'package:household_os/features/startup/presentation/startup_screen.dart';
+
+import 'fake_startup_port.dart';
 
 Profile _fakeProfile() => Profile(
   userId: 'uid-1',
@@ -67,7 +69,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            currentProfileProvider.overrideWith((ref) => completer.future),
+            startupPortProvider.overrideWithValue(
+              FakeStartupPort(onLoad: () => completer.future),
+            ),
           ],
           child: const MaterialApp(home: StartupScreen()),
         ),
@@ -82,7 +86,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            currentProfileProvider.overrideWith((ref) => completer.future),
+            startupPortProvider.overrideWithValue(
+              FakeStartupPort(onLoad: () => completer.future),
+            ),
           ],
           child: const MaterialApp(home: StartupScreen()),
         ),
@@ -97,8 +103,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            currentProfileProvider.overrideWith(
-              (ref) async => throw Exception('SocketException: nope'),
+            startupPortProvider.overrideWithValue(
+              FakeStartupPort(
+                onLoad: () async => throw Exception('SocketException: nope'),
+              ),
             ),
           ],
           child: const MaterialApp(home: StartupScreen()),
@@ -118,7 +126,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            currentProfileProvider.overrideWith((ref) => completer.future),
+            startupPortProvider.overrideWithValue(
+              FakeStartupPort(onLoad: () => completer.future),
+            ),
           ],
           child: const MaterialApp(home: StartupScreen()),
         ),
@@ -135,7 +145,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            currentProfileProvider.overrideWith((ref) async => _fakeProfile()),
+            startupPortProvider.overrideWithValue(
+              FakeStartupPort(onLoad: () async => _fakeProfile()),
+            ),
           ],
           child: const MaterialApp(home: StartupScreen()),
         ),
@@ -154,8 +166,11 @@ void main() {
     Widget app({required bool retryDisabled}) => ProviderScope(
       retry: retryDisabled ? noProviderRetry : null,
       overrides: [
-        currentProfileProvider.overrideWith(
-          (ref) => Future<Profile>.error(const SocketException('offline')),
+        startupPortProvider.overrideWithValue(
+          FakeStartupPort(
+            onLoad: () =>
+                Future<Profile>.error(const SocketException('offline')),
+          ),
         ),
       ],
       child: const MaterialApp(home: StartupScreen()),
@@ -172,16 +187,17 @@ void main() {
       expect(find.textContaining("Couldn't connect"), findsOneWidget);
     });
 
-    testWidgets('default retry keeps a failed load on the spinner', (
-      tester,
-    ) async {
-      await tester.pumpWidget(app(retryDisabled: false));
-      await tester.pump();
-      await tester.pump();
+    testWidgets(
+      'startup catches its own failure, so even default retry cannot trap the '
+      'screen on a spinner',
+      (tester) async {
+        await tester.pumpWidget(app(retryDisabled: false));
+        await tester.pump();
+        await tester.pump();
 
-      expect(find.text('Retry'), findsNothing);
-      // Drain pending retry timers so the test can end cleanly.
-      await tester.pump(const Duration(minutes: 5));
-    });
+        expect(find.text('Retry'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+      },
+    );
   });
 }

@@ -7,6 +7,8 @@ import 'package:household_os/app/theme/app_theme.dart';
 import 'package:household_os/core/theme/app_glass.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_background.dart';
+import 'package:household_os/core/services/supabase_service.dart';
+import 'package:household_os/features/auth/presentation/recovery_screen.dart';
 import 'package:household_os/features/homes/presentation/household_detail_screen.dart';
 import 'package:household_os/features/homes/presentation/homes_screen.dart';
 import 'package:household_os/features/homes/presentation/membership_watcher.dart';
@@ -31,12 +33,40 @@ const _kShellRootPaths = {'/today', '/homes', '/profile'};
 /// without needing a real `GoRouter`.
 bool isShellRootPath(String path) => _kShellRootPaths.contains(path);
 
+/// Whether Supabase currently holds a session. Treated as "yes" when Supabase
+/// is not initialised (widget tests), so only a real, signed-out client sends
+/// the user back to startup.
+bool hasAuthSession() {
+  try {
+    return supabaseClient.auth.currentSession != null;
+  } catch (_) {
+    return true;
+  }
+}
+
+/// Where a signed-out user is sent from any app route: the startup flow, so a
+/// stray navigation (a late `go`, a deep link, a notification tap) can never
+/// show household screens without a session. Startup and recovery themselves
+/// are always reachable. Null means "stay".
+String? sessionRedirect(String path, {required bool hasSession}) {
+  if (path == '/startup' || path == '/recover') return null;
+  return hasSession ? null : '/startup';
+}
+
+String? _requireSession(BuildContext context, GoRouterState state) =>
+    sessionRedirect(state.uri.path, hasSession: hasAuthSession());
+
 final appRouter = GoRouter(
   initialLocation: '/startup',
+  redirect: _requireSession,
   routes: [
     GoRoute(
       path: '/startup',
       builder: (context, state) => const StartupScreen(),
+    ),
+    GoRoute(
+      path: '/recover',
+      builder: (context, state) => const RecoveryScreen(),
     ),
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {

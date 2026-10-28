@@ -34,6 +34,8 @@ class Device {
       repository: repo,
       marker: SessionSwitchMarker(prefs),
       unregisterPushToken: () async => events.add('unregisterPushToken'),
+      restorePushRegistration: () async =>
+          events.add('restorePushRegistration'),
       clearDeviceData: () async => events.add('clearDeviceData'),
       onIdentityChanged: () => events.add('identityChanged'),
     );

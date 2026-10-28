@@ -11,14 +11,19 @@ import 'package:household_os/features/homes/domain/household_summary.dart';
 import 'package:household_os/features/homes/domain/household_stats.dart';
 import 'package:household_os/features/homes/domain/task_rotation_suggestion.dart';
 
+final householdRepositoryProvider = Provider<HouseholdRepository>(
+  (ref) => HouseholdRepository(supabaseClient),
+);
+
 class HomesNotifier extends AsyncNotifier<List<Household>> {
-  HouseholdRepository get _repo => HouseholdRepository(supabaseClient);
+  HouseholdRepository get _repo => ref.read(householdRepositoryProvider);
 
   @override
   Future<List<Household>> build() => _repo.fetchActiveHouseholds();
 
   Future<void> createHousehold(String name) async {
     final household = await _repo.createHousehold(name);
+    if (!ref.mounted) return;
     final current = switch (state) {
       AsyncData(:final value) => value,
       _ => <Household>[],
@@ -28,6 +33,7 @@ class HomesNotifier extends AsyncNotifier<List<Household>> {
 
   Future<Household> joinHousehold(String inviteCode) async {
     final household = await _repo.joinHousehold(inviteCode);
+    if (!ref.mounted) return household;
     final current = switch (state) {
       AsyncData(:final value) => value,
       _ => <Household>[],
@@ -40,6 +46,7 @@ class HomesNotifier extends AsyncNotifier<List<Household>> {
 
   Future<void> deleteHousehold(String householdId) async {
     await _repo.deleteHousehold(householdId);
+    if (!ref.mounted) return;
     final current = switch (state) {
       AsyncData(:final value) => value,
       _ => <Household>[],
@@ -49,6 +56,7 @@ class HomesNotifier extends AsyncNotifier<List<Household>> {
 
   Future<void> leaveHousehold(String householdId) async {
     await _repo.leaveHousehold(householdId);
+    if (!ref.mounted) return;
     final current = switch (state) {
       AsyncData(:final value) => value,
       _ => <Household>[],

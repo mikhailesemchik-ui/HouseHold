@@ -12,6 +12,19 @@ final currentUserIdProvider = Provider<String>((ref) {
   return id ?? '';
 });
 
+/// The signed-in user at this moment, as opposed to [currentUserIdProvider],
+/// which is fixed when the scope is built. Null when it cannot be told (for
+/// example before Supabase is initialised in a widget test).
+final liveAuthUserIdProvider = Provider<String? Function()>((ref) {
+  return () {
+    try {
+      return supabaseClient.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  };
+});
+
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
   return ExpenseRepository(supabaseClient);
 });

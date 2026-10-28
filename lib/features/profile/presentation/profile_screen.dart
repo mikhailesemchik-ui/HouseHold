@@ -97,7 +97,9 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
 
   Future<void> _loadSettings() async {
     final reminders = await ReminderSettings.isEnabled();
-    final householdUpdates = await HouseholdUpdatesPushSettings.isEnabled();
+    final householdUpdates = await HouseholdUpdatesPushSettings.forUser(
+      widget.profile.userId,
+    ).isEnabled();
     final mode = await WidgetSettings.getPrivacyMode();
     if (mounted) {
       setState(() {
@@ -123,8 +125,9 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
     final registrar = SupabaseDevicePushTokenRegistrar(supabaseClient);
     final controller = HouseholdUpdatesPushController(
       tokenProvider: const MethodChannelPushTokenProvider(),
-      preferenceStore:
-          const SharedPreferencesHouseholdUpdatesPushPreferenceStore(),
+      preferenceStore: SharedPreferencesHouseholdUpdatesPushPreferenceStore(
+        widget.profile.userId,
+      ),
       registerToken: (token, platform) =>
           registrar.registerCurrentUserToken(token: token, platform: platform),
       unregisterToken: registrar.unregisterCurrentUserToken,
@@ -145,7 +148,9 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
         );
       }
     } catch (_) {
-      final enabled = await HouseholdUpdatesPushSettings.isEnabled();
+      final enabled = await HouseholdUpdatesPushSettings.forUser(
+        widget.profile.userId,
+      ).isEnabled();
       if (!mounted) return;
       setState(() => _householdUpdatesEnabled = enabled);
       ScaffoldMessenger.of(context).showSnackBar(

@@ -26,6 +26,11 @@ enum EmailAuthFailure {
 
   /// The server answered, but not with the identity that was expected.
   identityMismatch,
+
+  /// This device's push registration of the current user could not be removed,
+  /// so the account was NOT switched: otherwise the device would keep
+  /// receiving the previous user's private notifications.
+  pushCleanupFailed,
 }
 
 class EmailAuthException implements Exception {

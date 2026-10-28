@@ -1,6 +1,7 @@
 import 'package:household_os/features/auth/data/email_account_repository.dart';
 import 'package:household_os/features/auth/data/session_switch_marker.dart';
 import 'package:household_os/features/auth/domain/auth_identity.dart';
+import 'package:household_os/features/auth/domain/email_auth_failure.dart';
 
 /// Changes which user this device is signed in as, and cleans what the previous
 /// user left behind. It has no UI and no caller yet: whoever offers "I already
@@ -23,17 +24,20 @@ class SessionSwitchCoordinator {
     required EmailAccountRepository repository,
     required SessionSwitchMarker marker,
     required Future<void> Function() unregisterPushToken,
+    required Future<void> Function() restorePushRegistration,
     required Future<void> Function() clearDeviceData,
     required void Function() onIdentityChanged,
   }) : _repository = repository,
        _marker = marker,
        _unregisterPushToken = unregisterPushToken,
+       _restorePushRegistration = restorePushRegistration,
        _clearDeviceData = clearDeviceData,
        _onIdentityChanged = onIdentityChanged;
 
   final EmailAccountRepository _repository;
   final SessionSwitchMarker _marker;
   final Future<void> Function() _unregisterPushToken;
+  final Future<void> Function() _restorePushRegistration;
   final Future<void> Function() _clearDeviceData;
   final void Function() _onIdentityChanged;
 
@@ -81,19 +85,32 @@ class SessionSwitchCoordinator {
     await _finish(previous, null);
   }
 
+  /// Marks the switch and removes the previous user's push registration. That
+  /// needs the previous user's session, so it runs before anything changes. If
+  /// it fails the switch does not happen: leaving the token behind would keep
+  /// delivering the previous user's private notifications to this device.
   Future<void> _begin(String? previous) async {
     if (previous == null) return;
     await _marker.mark(previous);
     try {
-      // Needs the previous user's session, so it runs before the switch.
       await _unregisterPushToken();
     } catch (_) {
-      // Best effort: a stale token row only delivers to a signed-out device.
+      await _marker.clear();
+      throw const EmailAuthException(EmailAuthFailure.pushCleanupFailed);
     }
   }
 
   Future<void> _finish(String? previous, String? now) async {
     if (previous == now) {
+      // Nothing changed (rejected code, offline): the user keeps their own
+      // notifications, which were switched off in advance.
+      if (previous != null) {
+        try {
+          await _restorePushRegistration();
+        } catch (_) {
+          // Retried by the next launch's sync.
+        }
+      }
       await _marker.clear();
       return;
     }

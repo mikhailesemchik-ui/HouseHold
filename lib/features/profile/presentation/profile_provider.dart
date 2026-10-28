@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/core/services/supabase_service.dart';
-import 'package:household_os/features/auth/data/session_switch_marker.dart';
 import 'package:household_os/features/profile/data/account_local_cleanup.dart';
 import 'package:household_os/features/profile/data/account_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,38 +16,14 @@ final accountLocalCleanupProvider = FutureProvider<AccountLocalCleanup>((
   return AccountLocalCleanup(await SharedPreferences.getInstance());
 });
 
+/// The signed-in user's profile. It never signs anyone in: an anonymous
+/// account is created only by the welcome screen's explicit choice, and
+/// interrupted cleanups run in the startup flow before this is first read.
 final currentProfileProvider = FutureProvider<Profile>((ref) async {
   final client = supabaseClient;
-
-  // Finish a local cleanup interrupted by an app kill, before any new
-  // anonymous account can be created.
-  try {
-    final cleanup = await ref.read(accountLocalCleanupProvider.future);
-    await cleanup.resumeIfPending(ref.read(accountRepositoryProvider));
-  } catch (_) {
-    // Retried on the next launch; never blocks loading the profile.
-  }
-
-  // Finish a user switch or sign-out that was cut short by an app kill.
-  try {
-    await SessionSwitchMarker(
-      await SharedPreferences.getInstance(),
-    ).resumeIfPending(
-      currentUserId: client.auth.currentUser?.id,
-      clearDeviceData: clearRemindersAndWidget,
-    );
-  } catch (_) {
-    // Retried on the next launch.
-  }
-
-  if (client.auth.currentSession == null) {
-    await client.auth.signInAnonymously();
-  }
-
   final user = client.auth.currentUser;
   if (user == null) {
-    throw StateError('Authentication failed unexpectedly.');
+    throw StateError('No signed-in user.');
   }
-
   return ProfileRepository(client).ensureProfile(user.id);
 });

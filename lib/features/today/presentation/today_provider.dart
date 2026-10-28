@@ -207,7 +207,9 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
   /// No-op when reminders are disabled.
   Future<void> reconcileReminders() async {
     final enabled = await ReminderSettings.isEnabled();
-    if (!enabled) return;
+    // The scope may have been replaced (another user) while settings loaded:
+    // this notifier's entries then belong to the previous user.
+    if (!enabled || !ref.mounted) return;
     await ReminderCoordinator.runReconciliation(
       service: notificationService,
       entries: _allEntries,

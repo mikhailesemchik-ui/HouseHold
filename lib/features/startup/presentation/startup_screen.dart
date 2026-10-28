@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/routing/app_router.dart';
 import 'package:household_os/app/theme/app_theme.dart';
-import 'package:household_os/features/profile/presentation/profile_provider.dart';
+import 'package:go_router/go_router.dart';
+import 'package:household_os/features/startup/domain/startup_state.dart';
+import 'package:household_os/features/startup/presentation/startup_provider.dart';
+import 'package:household_os/features/startup/presentation/welcome_view.dart';
 
 /// Returns a user-friendly message for a startup auth/network error.
 String startupFriendlyErrorMessage(Object error) {
@@ -23,22 +26,41 @@ class StartupScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profileAsync = ref.watch(currentProfileProvider);
-
-    return profileAsync.when(
-      data: (_) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          appRouter.go('/today');
-        });
-        return const _LoadingView();
-      },
-      loading: () => const _LoadingView(),
-      error: (error, _) => _ErrorView(
-        message: startupFriendlyErrorMessage(error),
-        onRetry: () => ref.invalidate(currentProfileProvider),
+    final notifier = ref.read(startupProvider.notifier);
+    return switch (ref.watch(startupProvider)) {
+      StartupReady() => const _EnterApp(),
+      StartupWelcome() => WelcomeView(
+        onGetStarted: notifier.continueWithoutRegistration,
+        onRecover: () => context.push('/recover'),
       ),
-    );
+      StartupFailed(:final error) => _ErrorView(
+        message: startupFriendlyErrorMessage(error),
+        onRetry: notifier.retry,
+      ),
+      // Resolving a restored session shows the same quiet loading frame, so
+      // the welcome screen never flashes for a returning user.
+      StartupResolving() || StartupSigningIn() => const _LoadingView(),
+    };
   }
+}
+
+/// Leaves the startup route for the app once, after the first frame.
+class _EnterApp extends StatefulWidget {
+  const _EnterApp();
+
+  @override
+  State<_EnterApp> createState() => _EnterAppState();
+}
+
+class _EnterAppState extends State<_EnterApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => appRouter.go('/today'));
+  }
+
+  @override
+  Widget build(BuildContext context) => const _LoadingView();
 }
 
 /// Shared identity block ("Household OS") both the loading and error frames

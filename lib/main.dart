@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:inspire_blur/inspire_blur.dart';
 import 'package:household_os/core/services/notification_service.dart';
@@ -10,6 +9,7 @@ import 'package:household_os/core/services/remote_push_notification_service.dart
 // ignore: unused_import
 import 'package:household_os/core/services/widget_action_entrypoint.dart';
 import 'app/app.dart';
+import 'app/user_scoped_root.dart';
 import 'app/routing/app_router.dart';
 import 'app/theme/app_theme.dart';
 import 'core/services/supabase_service.dart';
@@ -33,7 +33,19 @@ void main() async {
   final pushService = RemotePushNotificationService();
   await pushService.initialize(onNavigate: appRouter.go);
   HomeWidget.widgetClicked.listen((_) => appRouter.go('/today'));
-  runApp(ProviderScope(retry: noProviderRetry, child: const App()));
+  runApp(
+    UserScopedRoot(
+      // Supabase restores a persisted session before this point, so a null id
+      // here really means "no session on this device".
+      initialUserId: supabaseClient.auth.currentUser?.id,
+      userIdChanges: supabaseClient.auth.onAuthStateChange.map(
+        (state) => state.session?.user.id,
+      ),
+      onUserChanged: () => appRouter.go('/startup'),
+      retry: noProviderRetry,
+      child: const App(),
+    ),
+  );
   _handleLaunchNotification();
   _handleRemoteLaunchTap(pushService);
   _handleWidgetLaunch();

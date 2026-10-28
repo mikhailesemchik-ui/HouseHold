@@ -81,6 +81,16 @@ class FinancialSubmission {
       return false;
     }
 
+    // The user may have changed while the request id was being saved. The id and
+    // the details belong to [userId]; sending them under another session would
+    // attach this identity to someone else's request. Nothing is sent, and the
+    // saved id stays under its own user for that user's next attempt.
+    final liveUserId = ref.read(liveAuthUserIdProvider)();
+    if (liveUserId != null && liveUserId != userId) {
+      if (context.mounted) _showMessage(context, failureMessage);
+      return false;
+    }
+
     try {
       await send(operation.requestId);
       await _resolve(store, userId, householdId, kind, operation.requestId);

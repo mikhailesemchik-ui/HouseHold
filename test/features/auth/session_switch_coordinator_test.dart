@@ -26,6 +26,10 @@ class _Rig {
         events.add('unregisterPushToken(session=${port.userId})');
         if (failPush) throw StateError('push failure');
       },
+      restorePushRegistration: () async {
+        events.add('restorePushRegistration');
+        if (failRestore) throw StateError('restore failure');
+      },
       clearDeviceData: () async {
         events.add('clearDeviceData');
         if (failCleanup) throw StateError('cleanup failure');
@@ -39,6 +43,7 @@ class _Rig {
   late final SessionSwitchCoordinator coordinator;
   final events = <String>[];
   bool failPush = false;
+  bool failRestore = false;
   bool failCleanup = false;
 
   SessionSwitchMarker get marker => SessionSwitchMarker(prefs);
@@ -140,7 +145,10 @@ void main() {
         failsWith(EmailAuthFailure.codeRejected),
       );
       expect(rig.port.userId, _old);
-      expect(rig.events, ['unregisterPushToken(session=$_old)']);
+      expect(rig.events, [
+        'unregisterPushToken(session=$_old)',
+        'restorePushRegistration',
+      ]);
       expect(rig.marker.previousUserId, isNull);
     });
 
@@ -164,15 +172,42 @@ void main() {
       },
     );
 
-    test('a push-token failure does not block the switch', () async {
+    test('a push cleanup that fails blocks the switch: the session, the marker '
+        'and the old user\'s registration state stay as they were', () async {
       final rig = await _rig(signedInAs: _old, linked: true)
         ..failPush = true;
       await rig.requestCode();
-      final identity = await rig.coordinator.recover(
-        email: _email,
-        code: rig.port.signInCode!,
+      await expectLater(
+        rig.coordinator.recover(email: _email, code: rig.port.signInCode!),
+        failsWith(EmailAuthFailure.pushCleanupFailed),
       );
-      expect(identity.userId, _target);
+      expect(rig.port.userId, _old, reason: 'no switch happened');
+      expect(rig.port.calls, isNot(contains('verifySignInCode')));
+      expect(rig.marker.previousUserId, isNull);
+      expect(rig.events, ['unregisterPushToken(session=$_old)']);
+    });
+
+    test('a failing push cleanup also blocks signing out', () async {
+      final rig = await _rig(signedInAs: _old, linked: true)
+        ..failPush = true;
+      await expectLater(
+        rig.coordinator.signOut(),
+        failsWith(EmailAuthFailure.pushCleanupFailed),
+      );
+      expect(rig.port.userId, _old);
+      expect(rig.port.calls, isNot(contains('signOutLocal')));
+    });
+
+    test('a failed restore after a rejected code is not reported as success '
+        'or failure of the sign-in (the next launch repeats it)', () async {
+      final rig = await _rig(signedInAs: _old, linked: true)
+        ..failRestore = true;
+      await rig.requestCode();
+      await expectLater(
+        rig.coordinator.recover(email: _email, code: '000000'),
+        failsWith(EmailAuthFailure.codeRejected),
+      );
+      expect(rig.port.userId, _old);
     });
   });
 
