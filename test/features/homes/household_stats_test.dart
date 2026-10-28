@@ -186,15 +186,62 @@ void main() {
       );
     });
 
-    test('resolves deleted-member fallback when profile is missing', () {
+    test('a missing profile is "Someone", never assumed deleted', () {
       expect(
         resolveStatsMemberDisplayName(
           isActiveMember: false,
           profileDisplayName: null,
         ),
+        'Someone',
+      );
+      expect(
+        resolveStatsMemberDisplayName(
+          isActiveMember: true,
+          profileDisplayName: '  ',
+        ),
+        'Someone',
+      );
+    });
+
+    test('a deleted account wins over former membership', () {
+      expect(
+        resolveStatsMemberDisplayName(
+          accountState: 'deleted',
+          isActiveMember: false,
+          profileDisplayName: 'Deleted member',
+        ),
+        'Deleted member',
+      );
+      expect(
+        resolveStatsMemberDisplayName(
+          accountState: 'deleted',
+          isActiveMember: null,
+          profileDisplayName: null,
+        ),
         'Deleted member',
       );
     });
+
+    test(
+      'active members keep their name; unknown membership is not former',
+      () {
+        expect(
+          resolveStatsMemberDisplayName(
+            accountState: 'active',
+            isActiveMember: true,
+            profileDisplayName: 'Anna',
+          ),
+          'Anna',
+        );
+        expect(
+          resolveStatsMemberDisplayName(
+            isActiveMember: null,
+            profileDisplayName: 'Anna',
+          ),
+          'Anna',
+        );
+      },
+    );
 
     test('groups per-task distribution by task title and member', () {
       final stats = HouseholdStats.fromCompletions(

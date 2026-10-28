@@ -432,5 +432,121 @@ void main() {
         expect(titleField.decoration?.errorText, isNull);
       },
     );
+
+    group('assignee who is no longer an active member', () {
+      // No Supabase client exists in tests, so a submission that really
+      // starts ends in the "Failed to save" message; its absence proves that
+      // nothing was submitted.
+      const failed = 'Failed to save task. Please try again.';
+      const clearTitle = 'Clear the assignee?';
+
+      Task taskFor(String? assignee) => Task(
+        id: 't1',
+        householdId: 'hh',
+        title: 'Water plants',
+        assignedTo: assignee,
+        completedAt: DateTime.utc(2026, 8, 1),
+        createdBy: 'u1',
+        createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 1, 1),
+      );
+
+      Future<void> editTitleAndSave(WidgetTester tester) async {
+        await tester.enterText(find.byType(TextField).first, 'Water all');
+        await tester.tap(find.widgetWithText(TextButton, 'Save'));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('saving asks first and explains what is cleared', (
+        tester,
+      ) async {
+        await tester.pumpWidget(buildForm(existingTask: taskFor('gone')));
+        await tester.pumpAndSettle();
+        await editTitleAndSave(tester);
+
+        expect(find.text(clearTitle), findsOneWidget);
+        expect(find.textContaining('no longer an active'), findsOneWidget);
+        expect(find.textContaining('history is not changed'), findsOneWidget);
+        expect(find.text(failed), findsNothing);
+      });
+
+      testWidgets('cancelling submits nothing and keeps the edits', (
+        tester,
+      ) async {
+        await tester.pumpWidget(buildForm(existingTask: taskFor('gone')));
+        await tester.pumpAndSettle();
+        await editTitleAndSave(tester);
+        await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(clearTitle), findsNothing);
+        expect(find.text(failed), findsNothing);
+        expect(find.text('Water all'), findsOneWidget);
+        expect(find.widgetWithText(TextButton, 'Save'), findsOneWidget);
+      });
+
+      testWidgets('confirming goes on to save', (tester) async {
+        await tester.pumpWidget(buildForm(existingTask: taskFor('gone')));
+        await tester.pumpAndSettle();
+        await editTitleAndSave(tester);
+        await tester.tap(find.widgetWithText(FilledButton, 'Clear and save'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(failed), findsOneWidget);
+        expect(find.text('Water all'), findsOneWidget);
+      });
+
+      testWidgets('an active or missing assignee is never asked about', (
+        tester,
+      ) async {
+        for (final assignee in ['u2', null]) {
+          await tester.pumpWidget(buildForm(existingTask: taskFor(assignee)));
+          await tester.pumpAndSettle();
+          await editTitleAndSave(tester);
+
+          expect(find.text(clearTitle), findsNothing);
+          expect(find.text(failed), findsOneWidget);
+          await tester.pumpWidget(const SizedBox());
+        }
+      });
+
+      testWidgets('the former assignee is not offered as a choice', (
+        tester,
+      ) async {
+        await tester.pumpWidget(buildForm(existingTask: taskFor('gone')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(DropdownButton<String?>));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Alice'), findsWidgets);
+        expect(find.text('Bob'), findsWidgets);
+        expect(find.text('Unassigned'), findsWidgets);
+        expect(find.text('Former member'), findsNothing);
+      });
+
+      testWidgets('an unavailable member list blocks saving, edits kept', (
+        tester,
+      ) async {
+        for (final state in <AsyncValue<List<TaskMember>>>[
+          const AsyncLoading(),
+          AsyncError(StateError('down'), StackTrace.empty),
+        ]) {
+          await tester.pumpWidget(
+            buildForm(existingTask: taskFor('gone'), membersOverride: state),
+          );
+          await tester.pump();
+          await tester.pump();
+          await tester.enterText(find.byType(TextField).first, 'Water all');
+          await tester.tap(find.widgetWithText(TextButton, 'Save'));
+          await tester.pump();
+
+          expect(find.textContaining("Couldn't check household"), findsOne);
+          expect(find.text(clearTitle), findsNothing);
+          expect(find.text(failed), findsNothing);
+          expect(find.text('Water all'), findsOneWidget);
+          await tester.pumpWidget(const SizedBox());
+        }
+      });
+    });
   });
 }

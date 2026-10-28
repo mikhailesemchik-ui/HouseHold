@@ -116,11 +116,37 @@ void main() {
       expect(makeEvent('deleted').displayText, 'Anna deleted "Clean kitchen"');
     });
 
-    test('null actor falls back to Deleted user', () {
+    test('a missing actor profile is "Someone", not a deleted account', () {
       expect(
         makeEvent('completed', actorDisplayName: null).displayText,
-        'Deleted user completed "Clean kitchen"',
+        'Someone completed "Clean kitchen"',
       );
+    });
+
+    test('a verified deleted actor is anonymized', () {
+      final event = TaskEvent.fromMap({
+        'id': 'e',
+        'household_id': 'hh',
+        'actor_user_id': 'u',
+        'actor_profile': {'display_name': 'Anna', 'account_state': 'deleted'},
+        'event_type': 'completed',
+        'task_title': 'Clean kitchen',
+        'occurred_at': '2026-08-25T12:00:00.000Z',
+      });
+      expect(event.displayText, 'Deleted member completed "Clean kitchen"');
+    });
+
+    test('a known actor keeps their name whatever the membership', () {
+      final event = TaskEvent.fromMap({
+        'id': 'e',
+        'household_id': 'hh',
+        'actor_user_id': 'u',
+        'actor_profile': {'display_name': 'Anna', 'account_state': 'active'},
+        'event_type': 'completed',
+        'task_title': 'Clean kitchen',
+        'occurred_at': '2026-08-25T12:00:00.000Z',
+      });
+      expect(event.displayText, 'Anna completed "Clean kitchen"');
     });
 
     test('unknown event type falls back gracefully', () {

@@ -75,7 +75,7 @@ class _TasksBody extends ConsumerWidget {
     final occurrencesAsync = ref.watch(occurrencesStreamProvider(householdId));
     final members = switch (ref.watch(taskMembersProvider(householdId))) {
       AsyncData(:final value) => value,
-      _ => <TaskMember>[],
+      _ => null,
     };
 
     // The header is ordinary scrollable content now (not a pinned
@@ -186,7 +186,7 @@ class _TasksBody extends ConsumerWidget {
                 (t) => _TaskListRow(
                   title: t.title,
                   isCompleted: t.isCompleted,
-                  assigneeLabel: _assigneeLabel(members, t.assignedTo),
+                  assigneeLabel: taskAssigneeLabel(members, t.assignedTo),
                   scheduleText: null,
                   isOverdue: false,
                   recurrenceType: t.recurrenceType,
@@ -217,7 +217,7 @@ class _TasksBody extends ConsumerWidget {
                   return _TaskListRow(
                     title: task.title,
                     isCompleted: o.isCompleted,
-                    assigneeLabel: _assigneeLabel(members, o.assignedTo),
+                    assigneeLabel: taskAssigneeLabel(members, o.assignedTo),
                     scheduleText: _formatScheduled(o.scheduledAt),
                     isOverdue: o.isOverdue,
                     recurrenceType: task.recurrenceType,
@@ -265,15 +265,6 @@ class _TasksLoadingBody extends StatelessWidget {
       child: Center(child: CircularProgressIndicator()),
     );
   }
-}
-
-String _assigneeLabel(List<TaskMember> members, String? assignedTo) {
-  if (assignedTo == null) return 'Unassigned';
-  return members
-          .where((m) => m.userId == assignedTo)
-          .firstOrNull
-          ?.displayName ??
-      'Unassigned';
 }
 
 String _formatScheduled(DateTime utc) {

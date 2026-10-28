@@ -137,7 +137,7 @@ class TaskRepository {
   Future<List<TaskMember>> fetchMembers(String householdId) async {
     final rows = await _client
         .from('household_members')
-        .select('user_id, profiles(display_name, public_id)')
+        .select('user_id, profiles(display_name, public_id, account_state)')
         .eq('household_id', householdId)
         .eq('status', 'active');
     return rows.map(TaskMember.fromMap).toList();
@@ -147,7 +147,9 @@ class TaskRepository {
   Future<List<TaskEvent>> fetchRecentActivity(String householdId) async {
     final rows = await _client
         .from('task_events')
-        .select('*, actor_profile:profiles!actor_user_id(display_name)')
+        .select(
+          '*, actor_profile:profiles!actor_user_id(display_name, account_state)',
+        )
         .eq('household_id', householdId)
         .order('occurred_at', ascending: false)
         .limit(10);

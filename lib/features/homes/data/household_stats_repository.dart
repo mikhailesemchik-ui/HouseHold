@@ -1,4 +1,4 @@
-﻿import 'package:household_os/features/homes/domain/household_stats.dart';
+import 'package:household_os/features/homes/domain/household_stats.dart';
 import 'package:household_os/features/homes/domain/task_rotation_suggestion.dart';
 import 'package:household_os/features/tasks/domain/recurrence_type.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -35,6 +35,8 @@ class HouseholdStatsRepository {
         displayName: resolveStatsMemberDisplayName(
           isActiveMember: member?.isActive,
           profileDisplayName: member?.displayName ?? profileName,
+          accountState:
+              member?.accountState ?? actorProfile?['account_state'] as String?,
         ),
         taskTitle: row['task_title'] as String? ?? '(unknown task)',
         completedAt: DateTime.parse(row['occurred_at'] as String),
@@ -80,6 +82,7 @@ class HouseholdStatsRepository {
         displayName: resolveStatsMemberDisplayName(
           isActiveMember: row['status'] == 'active',
           profileDisplayName: profile?['display_name'] as String?,
+          accountState: profile?['account_state'] as String?,
         ),
         publicId: profile?['public_id'] as String? ?? '',
         isActive: row['status'] == 'active',
@@ -133,7 +136,7 @@ class HouseholdStatsRepository {
     final rows = await _client
         .from('task_events')
         .select(
-          'id, task_id, actor_user_id, task_title, occurred_at, actor_profile:profiles!actor_user_id(display_name)',
+          'id, task_id, actor_user_id, task_title, occurred_at, actor_profile:profiles!actor_user_id(display_name, account_state)',
         )
         .eq('household_id', householdId)
         .eq('event_type', 'completed')
@@ -157,7 +160,9 @@ class HouseholdStatsRepository {
   ) async {
     final rows = await _client
         .from('household_members')
-        .select('user_id, status, profiles(display_name, public_id)')
+        .select(
+          'user_id, status, profiles(display_name, public_id, account_state)',
+        )
         .eq('household_id', householdId);
     return rows.cast<Map<String, dynamic>>();
   }
@@ -172,6 +177,9 @@ class HouseholdStatsRepository {
           displayName:
               (row['profiles'] as Map<String, dynamic>?)?['display_name']
                   as String?,
+          accountState:
+              (row['profiles'] as Map<String, dynamic>?)?['account_state']
+                  as String?,
         ),
     };
   }
@@ -181,8 +189,10 @@ class _MemberProfileStatus {
   const _MemberProfileStatus({
     required this.isActive,
     required this.displayName,
+    required this.accountState,
   });
 
   final bool isActive;
   final String? displayName;
+  final String? accountState;
 }

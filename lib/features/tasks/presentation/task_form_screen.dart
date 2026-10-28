@@ -164,6 +164,44 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
     }
 
     if (_isSubmitting) return;
+
+    String? assignee = _selectedAssigneeId;
+    if (_isEdit) {
+      final members = switch (ref.read(
+        taskMembersProvider(widget.householdId),
+      )) {
+        AsyncData(:final value) => value,
+        _ => null,
+      };
+      switch (checkAssigneeSave(members, _selectedAssigneeId)) {
+        case AssigneeSaveOutcome.save:
+          break;
+        case AssigneeSaveOutcome.unavailable:
+          // Nothing is sent and the edits stay; the assignee field offers
+          // the retry.
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "Couldn't check household members yet. Try again in a moment.",
+              ),
+            ),
+          );
+          return;
+        case AssigneeSaveOutcome.confirmClear:
+          final clear = await confirmDestructive(
+            context,
+            title: 'Clear the assignee?',
+            message:
+                'The person assigned to this task is no longer an active '
+                'household member. Saving will clear the assignee on this '
+                "task. The task's activity history is not changed.",
+            confirmLabel: 'Clear and save',
+          );
+          if (!mounted || !clear) return;
+          assignee = null;
+      }
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
@@ -173,7 +211,7 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
           taskId: widget.existingTask!.id,
           title: title,
           description: _descriptionController.text,
-          assignedTo: _selectedAssigneeId,
+          assignedTo: assignee,
           dueAt: _dueAt,
           recurrenceType: _recurrenceType,
         );

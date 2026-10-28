@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:household_os/core/utils/member_identity.dart';
 
 @immutable
 class TaskEvent {
@@ -11,6 +12,7 @@ class TaskEvent {
     this.taskId,
     this.actorUserId,
     this.actorDisplayName,
+    this.actorAccountState,
     this.assignedTo,
   });
 
@@ -19,15 +21,20 @@ class TaskEvent {
   final String householdId;
   final String? actorUserId;
   final String? actorDisplayName;
+  final String? actorAccountState;
   final String eventType;
   final String taskTitle;
   final String? assignedTo;
   final DateTime occurredAt;
 
   /// Human-readable description of this event for use in the activity feed.
-  /// Falls back to "Deleted user" when the actor's profile is not accessible.
+  /// "Deleted member" only when the account state says so; an actor whose
+  /// profile is missing or inaccessible is just "Someone".
   String get displayText {
-    final actor = actorDisplayName ?? 'Deleted user';
+    final actor = memberNameLabel(
+      accountState: actorAccountState,
+      displayName: actorDisplayName,
+    );
     return switch (eventType) {
       'created' => '$actor created "$taskTitle"',
       'updated' => '$actor updated "$taskTitle"',
@@ -46,6 +53,7 @@ class TaskEvent {
       householdId: map['household_id'] as String,
       actorUserId: map['actor_user_id'] as String?,
       actorDisplayName: actorProfile?['display_name'] as String?,
+      actorAccountState: actorProfile?['account_state'] as String?,
       eventType: map['event_type'] as String,
       taskTitle: map['task_title'] as String,
       assignedTo: map['assigned_to'] as String?,

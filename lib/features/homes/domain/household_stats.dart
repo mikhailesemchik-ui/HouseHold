@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:household_os/core/utils/member_identity.dart';
 
 const fairnessMinimumCompletions = 10;
 const fairnessConcentratedShareThreshold = 70;
@@ -139,13 +140,12 @@ class TaskDistributionMemberCount {
 String resolveStatsMemberDisplayName({
   required bool? isActiveMember,
   required String? profileDisplayName,
-}) {
-  if (profileDisplayName == null || profileDisplayName.isEmpty) {
-    return 'Deleted member';
-  }
-  if (isActiveMember == false) return 'Former member';
-  return profileDisplayName;
-}
+  String? accountState,
+}) => memberStatsLabel(
+  accountState: accountState,
+  isActiveMember: isActiveMember,
+  displayName: profileDisplayName,
+);
 
 List<TaskCompletionRecord> filterCompletionsForPeriod(
   List<TaskCompletionRecord> completions,
