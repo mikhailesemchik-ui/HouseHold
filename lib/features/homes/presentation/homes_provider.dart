@@ -142,6 +142,23 @@ final householdStatsProvider =
       ).fetchStats(householdId: request.householdId, period: request.period);
     });
 
+/// Drops this household's retained Statistics (every period) and rotation
+/// suggestions. Both are plain retained FutureProviders: nothing else refetches
+/// them, so a completion made on another device stayed invisible until the app
+/// restarted. Nothing is fetched here; a screen that is watching them refetches
+/// once (keeping its current numbers meanwhile) and an unwatched one is simply
+/// dropped, so the next visit starts from the server.
+void invalidateHouseholdStats(WidgetRef ref, String householdId) {
+  for (final period in HouseholdStatsPeriod.values) {
+    ref.invalidate(
+      householdStatsProvider(
+        HouseholdStatsRequest(householdId: householdId, period: period),
+      ),
+    );
+  }
+  ref.invalidate(taskRotationSuggestionsProvider(householdId));
+}
+
 final taskRotationSuggestionsProvider =
     FutureProvider.family<List<TaskRotationSuggestion>, String>((
       ref,

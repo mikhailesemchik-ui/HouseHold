@@ -195,6 +195,16 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
         // shopping/expense mutation was previously left stale until the
         // app restarted (MU-002).
         ref.invalidate(householdSummaryProvider(widget.householdId));
+        // Statistics (completions per member, rotation) come from task and
+        // membership events only; shopping and expense events cannot change
+        // them, so they do not trigger a refetch.
+        if (newEvents.any(
+          (e) =>
+              e.eventType.startsWith('task_') ||
+              _kMembershipEventTypes.contains(e.eventType),
+        )) {
+          invalidateHouseholdStats(ref, widget.householdId);
+        }
         if (newEvents.any(
           (e) => _kMembershipEventTypes.contains(e.eventType),
         )) {

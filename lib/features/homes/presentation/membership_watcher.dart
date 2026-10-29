@@ -121,4 +121,5 @@ void _evictHouseholdCaches(WidgetRef ref, String id) {
   ref.invalidate(householdRecentActivityProvider(id));
   ref.invalidate(householdAllActivityProvider(id));
   ref.invalidate(taskMembersProvider(id));
+  invalidateHouseholdStats(ref, id);
 }
