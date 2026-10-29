@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:household_os/core/services/realtime_recovery.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/features/expenses/data/expense_repository.dart';
 import 'package:household_os/features/expenses/domain/archived_entry.dart';
@@ -32,19 +33,31 @@ final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
 /// autoDispose cancels the subscription when the screen is left.
 final expensesProvider = StreamProvider.autoDispose
     .family<List<Expense>, String>((ref, householdId) {
-      return ExpenseRepository(supabaseClient).watchExpenses(householdId);
+      return recoveringStream(
+        ref,
+        () => ExpenseRepository(supabaseClient).watchExpenses(householdId),
+        label: 'expenses',
+      );
     });
 
 /// autoDispose cancels the subscription when the screen is left.
 final settlementsProvider = StreamProvider.autoDispose
     .family<List<Settlement>, String>((ref, householdId) {
-      return ExpenseRepository(supabaseClient).watchSettlements(householdId);
+      return recoveringStream(
+        ref,
+        () => ExpenseRepository(supabaseClient).watchSettlements(householdId),
+        label: 'settlements',
+      );
     });
 
 /// Cancelled entries; autoDispose cancels the subscription with the screen.
 final archiveProvider = StreamProvider.autoDispose
     .family<List<ArchivedEntry>, String>((ref, householdId) {
-      return ExpenseRepository(supabaseClient).watchArchive(householdId);
+      return recoveringStream(
+        ref,
+        () => ExpenseRepository(supabaseClient).watchArchive(householdId),
+        label: 'archive',
+      );
     });
 
 final expenseMembersProvider = FutureProvider.autoDispose

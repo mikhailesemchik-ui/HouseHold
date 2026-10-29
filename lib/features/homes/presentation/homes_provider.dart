@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:household_os/core/services/realtime_recovery.dart';
 import 'package:household_os/core/services/supabase_service.dart';
 import 'package:household_os/features/homes/data/household_dashboard_repository.dart';
 import 'package:household_os/features/homes/data/household_repository.dart';
@@ -122,9 +123,13 @@ final householdAllActivityProvider =
 /// don't otherwise learn about them during a running session. See TWO-001.
 final householdEventsStreamProvider = StreamProvider.autoDispose
     .family<List<HouseholdEvent>, String>((ref, householdId) {
-      return HouseholdDashboardRepository(
-        supabaseClient,
-      ).watchEvents(householdId);
+      return recoveringStream(
+        ref,
+        () => HouseholdDashboardRepository(
+          supabaseClient,
+        ).watchEvents(householdId),
+        label: 'household events',
+      );
     });
 
 final householdStatsProvider =
@@ -155,5 +160,9 @@ final activeHouseholdIdsProvider = StreamProvider.autoDispose<Set<String>>((
 ) {
   final userId = supabaseClient.auth.currentUser?.id;
   if (userId == null) return const Stream.empty();
-  return HouseholdRepository(supabaseClient).watchActiveHouseholdIds(userId);
+  return recoveringStream(
+    ref,
+    () => HouseholdRepository(supabaseClient).watchActiveHouseholdIds(userId),
+    label: 'memberships',
+  );
 });

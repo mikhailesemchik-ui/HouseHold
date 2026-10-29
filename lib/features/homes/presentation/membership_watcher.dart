@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:household_os/core/services/realtime_recovery.dart';
 import 'package:household_os/core/services/recurring_occurrence_refresher.dart';
 import 'package:household_os/features/homes/domain/household.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
@@ -48,6 +49,9 @@ class _MembershipWatcherState extends ConsumerState<MembershipWatcher>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    // Streams that failed while the app was away reopen right now, even when
+    // the homes list below could not be loaded.
+    ref.read(realtimeResumeProvider.notifier).resumed();
     final homes = ref.read(homesProvider).asData?.value;
     if (homes == null) return;
     // New occurrences reach open Tasks screens through realtime.

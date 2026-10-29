@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/core/services/notification_service.dart';
+import 'package:household_os/core/services/realtime_recovery.dart';
 import 'package:household_os/core/services/reminder_coordinator.dart';
 import 'package:household_os/core/services/recurring_occurrence_refresher.dart';
 import 'package:household_os/core/services/reminder_settings.dart';
@@ -149,18 +151,31 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
 
     final repo = TodayRepository(supabaseClient);
 
-    final occSub = repo.watchAssignedOccurrenceRows().listen((rows) {
-      _occRows = rows;
-      if (state is AsyncData) {
-        state = AsyncData(_compute());
-      }
-    });
-    final taskSub = repo.watchAssignedTaskRows().listen((rows) {
-      _taskRows = rows;
-      if (state is AsyncData) {
-        state = AsyncData(_compute());
-      }
-    });
+    // recoveringStream reopens a failed stream; once its retries are used up
+    // the last data stays on screen and the failure is only logged (an
+    // unhandled stream error would otherwise be an uncaught exception).
+    final occSub =
+        recoveringStream(
+          ref,
+          repo.watchAssignedOccurrenceRows,
+          label: 'today occurrences',
+        ).listen((rows) {
+          _occRows = rows;
+          if (state is AsyncData) {
+            state = AsyncData(_compute());
+          }
+        }, onError: _logStreamFailure);
+    final taskSub =
+        recoveringStream(
+          ref,
+          repo.watchAssignedTaskRows,
+          label: 'today tasks',
+        ).listen((rows) {
+          _taskRows = rows;
+          if (state is AsyncData) {
+            state = AsyncData(_compute());
+          }
+        }, onError: _logStreamFailure);
 
     ref.onDispose(() {
       occSub.cancel();
@@ -168,6 +183,10 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
     });
 
     return _compute();
+  }
+
+  void _logStreamFailure(Object error, StackTrace stackTrace) {
+    debugPrint('Today stream failed for good: $error');
   }
 
   Map<String, List<TodayEntry>> _compute() {
