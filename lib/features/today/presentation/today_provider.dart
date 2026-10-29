@@ -134,7 +134,38 @@ bool _isLocalToday(DateTime utc, DateTime now) {
   return (active: active, completedToday: completedToday);
 }
 
+/// Overridable in tests; the real one talks to Supabase.
+final todayRepositoryProvider = Provider<TodayRepository>(
+  (ref) => TodayRepository(supabaseClient),
+);
+
+/// Delay before a failed Today stream is reopened (doubles per attempt);
+/// overridable so tests need not wait seconds.
+final todayRetryDelayProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 2),
+);
+
 class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
+  // Today is built from two streams. A stream is "stale" from the moment it
+  // gives up (recoveringStream used all its retries) until it delivers a fresh
+  // snapshot. Opening a stream again, resuming the app or a Retry never clears
+  // it, only data does, and the flags outlive a provider rebuild (Retry) so
+  // the warning cannot vanish while the new streams are still failing. A
+  // disposed provider takes its flags with it, so another user starts clean.
+  bool _occurrencesStale = false;
+  bool _tasksStale = false;
+  final ValueNotifier<bool> _stale = ValueNotifier(false);
+
+  /// True while either source may be out of date. The data on screen is the
+  /// last successful one.
+  ValueListenable<bool> get isStale => _stale;
+
+  void _markStale({bool? occurrences, bool? tasks}) {
+    _occurrencesStale = occurrences ?? _occurrencesStale;
+    _tasksStale = tasks ?? _tasksStale;
+    _stale.value = _occurrencesStale || _tasksStale;
+  }
+
   List<Map<String, dynamic>> _occRows = [];
   List<Map<String, dynamic>> _taskRows = [];
   Map<String, String> _householdNames = {};
@@ -149,33 +180,45 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
     // Fire-and-forget; failure does not erase displayed data.
     ref.read(recurringOccurrenceRefresherProvider).refresh().ignore();
 
-    final repo = TodayRepository(supabaseClient);
+    final repo = ref.read(todayRepositoryProvider);
+    final retryDelay = ref.read(todayRetryDelayProvider);
 
     // recoveringStream reopens a failed stream; once its retries are used up
-    // the last data stays on screen and the failure is only logged (an
-    // unhandled stream error would otherwise be an uncaught exception).
+    // the error arrives here, the last data stays on screen and the source is
+    // marked stale (the screen shows a warning).
     final occSub =
         recoveringStream(
           ref,
           repo.watchAssignedOccurrenceRows,
           label: 'today occurrences',
-        ).listen((rows) {
-          _occRows = rows;
-          if (state is AsyncData) {
-            state = AsyncData(_compute());
-          }
-        }, onError: _logStreamFailure);
+          retryDelay: retryDelay,
+        ).listen(
+          (rows) {
+            _occRows = rows;
+            _markStale(occurrences: false);
+            if (state is AsyncData) {
+              state = AsyncData(_compute());
+            }
+          },
+          onError: (Object e, StackTrace s) =>
+              _onStreamFailed(e, occurrences: true),
+        );
     final taskSub =
         recoveringStream(
           ref,
           repo.watchAssignedTaskRows,
           label: 'today tasks',
-        ).listen((rows) {
-          _taskRows = rows;
-          if (state is AsyncData) {
-            state = AsyncData(_compute());
-          }
-        }, onError: _logStreamFailure);
+          retryDelay: retryDelay,
+        ).listen(
+          (rows) {
+            _taskRows = rows;
+            _markStale(tasks: false);
+            if (state is AsyncData) {
+              state = AsyncData(_compute());
+            }
+          },
+          onError: (Object e, StackTrace s) => _onStreamFailed(e, tasks: true),
+        );
 
     ref.onDispose(() {
       occSub.cancel();
@@ -185,8 +228,9 @@ class TodayNotifier extends AsyncNotifier<Map<String, List<TodayEntry>>> {
     return _compute();
   }
 
-  void _logStreamFailure(Object error, StackTrace stackTrace) {
+  void _onStreamFailed(Object error, {bool? occurrences, bool? tasks}) {
     debugPrint('Today stream failed for good: $error');
+    _markStale(occurrences: occurrences, tasks: tasks);
   }
 
   Map<String, List<TodayEntry>> _compute() {

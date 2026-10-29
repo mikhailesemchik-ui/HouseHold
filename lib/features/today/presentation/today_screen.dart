@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -100,6 +101,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
         child: ListView(
           children: [
             const AppScreenHeader(title: 'Today', bottom: _DateSubtitle()),
+            if (sectionsAsync.hasValue)
+              _StaleBanner(
+                isStale: ref.watch(todayProvider.notifier).isStale,
+                onRetry: () => ref.invalidate(todayProvider),
+              ),
             ...bodyChildren,
           ],
         ),
@@ -338,6 +344,76 @@ class _TaskSubtitle extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stale-data warning
+// ---------------------------------------------------------------------------
+
+/// A quiet inline notice above the list while a Realtime source has given up.
+/// The tasks below it stay as they were; Retry rebuilds Today's streams.
+class _StaleBanner extends StatelessWidget {
+  const _StaleBanner({required this.isStale, required this.onRetry});
+
+  final ValueListenable<bool> isStale;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: isStale,
+      builder: (context, stale, _) {
+        if (!stale) return const SizedBox.shrink();
+        final colorScheme = Theme.of(context).colorScheme;
+        final textTheme = Theme.of(context).textTheme;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.base,
+            AppSpacing.sm,
+            AppSpacing.base,
+            AppSpacing.sm,
+          ),
+          child: Semantics(
+            container: true,
+            liveRegion: true,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  left: AppSpacing.md,
+                  top: AppSpacing.xs,
+                  bottom: AppSpacing.xs,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.sync_problem_outlined,
+                      size: 20,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'Some tasks may be out of date. Check your '
+                        'connection and try again.',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    TextButton(onPressed: onRetry, child: const Text('Retry')),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
