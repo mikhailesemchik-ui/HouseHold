@@ -101,7 +101,13 @@ final appRouter = GoRouter(
                       path: 'tasks',
                       builder: (context, state) {
                         final id = state.pathParameters['householdId']!;
-                        return TasksScreen(householdId: id);
+                        // Set when Today opens this screen for one task.
+                        final query = state.uri.queryParameters;
+                        return TasksScreen(
+                          householdId: id,
+                          focusTaskId: query['task'],
+                          focusOccurrenceId: query['occurrence'],
+                        );
                       },
                     ),
                     GoRoute(

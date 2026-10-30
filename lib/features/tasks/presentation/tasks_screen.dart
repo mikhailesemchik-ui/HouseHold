@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:household_os/app/theme/app_shell_metrics.dart';
 import 'package:household_os/core/services/recurring_occurrence_refresher.dart';
 import 'package:household_os/core/services/supabase_service.dart';
+import 'package:household_os/core/theme/app_radius.dart';
 import 'package:household_os/core/theme/app_spacing.dart';
 import 'package:household_os/core/widgets/app_back_button.dart';
 import 'package:household_os/core/widgets/app_completion_checkbox.dart';
@@ -41,10 +45,58 @@ TasksLoadState resolveTasksLoadState(
   return TasksLoadState.ready;
 }
 
+/// Large enough to build every row of a household's list at once (an infinite
+/// extent would give the accessibility tree non-finite geometry).
+const _buildWholeListExtent = 100000.0;
+
+/// The Tasks row a Today tap meant: its own occurrence, else the task's own
+/// row, else the task's next open occurrence. Null when this household's lists
+/// do not contain it, so a task of another household or a deleted one is never
+/// matched. An occurrence id is only accepted together with its own task id.
+({String? occurrenceId, String? taskId})? resolveFocusedRow({
+  required String? taskId,
+  required String? occurrenceId,
+  required List<Task> tasks,
+  required List<TaskOccurrence>? occurrences,
+}) {
+  final taskIds = {for (final t in tasks) t.id};
+  if (occurrenceId != null && occurrences != null) {
+    for (final o in occurrences) {
+      if (o.id == occurrenceId &&
+          (taskId == null || o.taskId == taskId) &&
+          taskIds.contains(o.taskId)) {
+        return (occurrenceId: o.id, taskId: null);
+      }
+    }
+  }
+  if (taskId == null) return null;
+  for (final t in tasks) {
+    if (t.id == taskId && t.dueAt == null) {
+      return (occurrenceId: null, taskId: t.id);
+    }
+  }
+  if (!taskIds.contains(taskId)) return null;
+  final own = (occurrences ?? const <TaskOccurrence>[])
+      .where((o) => o.taskId == taskId)
+      .toList();
+  if (own.isEmpty) return null;
+  final next = own.firstWhere((o) => !o.isCompleted, orElse: () => own.first);
+  return (occurrenceId: next.id, taskId: null);
+}
+
 class TasksScreen extends ConsumerStatefulWidget {
-  const TasksScreen({super.key, required this.householdId});
+  const TasksScreen({
+    super.key,
+    required this.householdId,
+    this.focusTaskId,
+    this.focusOccurrenceId,
+  });
 
   final String householdId;
+
+  /// Set when opened from Today: the row to scroll to and highlight.
+  final String? focusTaskId;
+  final String? focusOccurrenceId;
 
   @override
   ConsumerState<TasksScreen> createState() => _TasksScreenState();
@@ -60,17 +112,89 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(body: _TasksBody(householdId: widget.householdId));
+    return Scaffold(
+      body: _TasksBody(
+        householdId: widget.householdId,
+        focusTaskId: widget.focusTaskId,
+        focusOccurrenceId: widget.focusOccurrenceId,
+      ),
+    );
   }
 }
 
-class _TasksBody extends ConsumerWidget {
-  const _TasksBody({required this.householdId});
+class _TasksBody extends ConsumerStatefulWidget {
+  const _TasksBody({
+    required this.householdId,
+    required this.focusTaskId,
+    required this.focusOccurrenceId,
+  });
 
   final String householdId;
+  final String? focusTaskId;
+  final String? focusOccurrenceId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TasksBody> createState() => _TasksBodyState();
+}
+
+class _TasksBodyState extends ConsumerState<_TasksBody> {
+  final _focusKey = GlobalKey();
+  Timer? _highlightTimer;
+  bool _focusHandled = false;
+  bool _highlight = false;
+
+  bool get _focusRequested =>
+      widget.focusTaskId != null || widget.focusOccurrenceId != null;
+
+  @override
+  void didUpdateWidget(_TasksBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusTaskId != widget.focusTaskId ||
+        oldWidget.focusOccurrenceId != widget.focusOccurrenceId) {
+      _focusHandled = false;
+      _highlight = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _highlightTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Runs once per target, after the row exists: scrolls to it and highlights
+  /// it briefly, or says so when it is not in this household's list.
+  void _handleFocus({required bool found, required bool resolved}) {
+    if (!_focusRequested || _focusHandled) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _focusHandled) return;
+      if (found) {
+        final rowContext = _focusKey.currentContext;
+        if (rowContext == null) return;
+        _focusHandled = true;
+        Scrollable.ensureVisible(
+          rowContext,
+          alignment: 0.2,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+        setState(() => _highlight = true);
+        _highlightTimer?.cancel();
+        _highlightTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _highlight = false);
+        });
+      } else if (resolved) {
+        _focusHandled = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That task is no longer available.')),
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final householdId = widget.householdId;
     final tasksAsync = ref.watch(tasksStreamProvider(householdId));
     final occurrencesAsync = ref.watch(occurrencesStreamProvider(householdId));
     final members = switch (ref.watch(taskMembersProvider(householdId))) {
@@ -148,6 +272,16 @@ class _TasksBody extends ConsumerWidget {
     // occurrence is still loading.
     final isEmpty = nonDueTasks.isEmpty && (occurrencesData?.isEmpty ?? false);
 
+    final focused = _focusRequested
+        ? resolveFocusedRow(
+            taskId: widget.focusTaskId,
+            occurrenceId: widget.focusOccurrenceId,
+            tasks: tasks,
+            occurrences: occurrencesData,
+          )
+        : null;
+    _handleFocus(found: focused != null, resolved: !occurrencesPending);
+
     if (isEmpty) {
       return SafeArea(
         top: false,
@@ -180,10 +314,17 @@ class _TasksBody extends ConsumerWidget {
             padding: EdgeInsets.only(
               bottom: context.shellBottomInset + kFabClearance,
             ),
+            // Rows are built lazily, so a row far down has no widget to scroll
+            // to yet: while a target is pending the whole list is built once.
+            scrollCacheExtent: _focusRequested && !_focusHandled
+                ? const ScrollCacheExtent.pixels(_buildWholeListExtent)
+                : null,
             children: [
               header,
               ...nonDueTasks.map(
                 (t) => _TaskListRow(
+                  key: focused?.taskId == t.id ? _focusKey : null,
+                  highlighted: _highlight && focused?.taskId == t.id,
                   title: t.title,
                   isCompleted: t.isCompleted,
                   assigneeLabel: taskAssigneeLabel(members, t.assignedTo),
@@ -215,6 +356,8 @@ class _TasksBody extends ConsumerWidget {
                   final task = tasksById[o.taskId];
                   if (task == null) return const SizedBox.shrink();
                   return _TaskListRow(
+                    key: focused?.occurrenceId == o.id ? _focusKey : null,
+                    highlighted: _highlight && focused?.occurrenceId == o.id,
                     title: task.title,
                     isCompleted: o.isCompleted,
                     assigneeLabel: taskAssigneeLabel(members, o.assignedTo),
@@ -425,6 +568,8 @@ class _InlineSectionError extends StatelessWidget {
 
 class _TaskListRow extends StatelessWidget {
   const _TaskListRow({
+    super.key,
+    this.highlighted = false,
     required this.title,
     required this.isCompleted,
     required this.assigneeLabel,
@@ -436,6 +581,8 @@ class _TaskListRow extends StatelessWidget {
     required this.onDelete,
   });
 
+  /// Marks the row a Today tap led to; drawn as an outline, not only a colour.
+  final bool highlighted;
   final String title;
   final bool isCompleted;
   final String assigneeLabel;
@@ -464,98 +611,131 @@ class _TaskListRow extends StatelessWidget {
         AppSpacing.base,
         AppSpacing.sm,
       ),
-      child: AppSoftCard(
-        onTap: onEdit,
-        child: Row(
-          children: [
-            AppCompletionCheckbox(
-              checked: isCompleted,
-              semanticLabel:
-                  'Mark "$title" as ${isCompleted ? 'not done' : 'done'}',
-              onChanged: onToggle,
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AppCompletionTitle(
-                    text: title,
-                    completed: isCompleted,
-                    baseStyle: textTheme.titleSmall,
-                    completedColor: colorScheme.onSurfaceVariant,
-                    maxLines: 2,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            assigneeLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                        if (scheduleText != null) ...[
-                          Text(
-                            '  ·  ',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+      child: _HighlightFrame(
+        highlighted: highlighted,
+        child: AppSoftCard(
+          onTap: onEdit,
+          child: Row(
+            children: [
+              AppCompletionCheckbox(
+                checked: isCompleted,
+                semanticLabel:
+                    'Mark "$title" as ${isCompleted ? 'not done' : 'done'}',
+                onChanged: onToggle,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AppCompletionTitle(
+                      text: title,
+                      completed: isCompleted,
+                      baseStyle: textTheme.titleSmall,
+                      completedColor: colorScheme.onSurfaceVariant,
+                      maxLines: 2,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
                           Flexible(
                             child: Text(
-                              scheduleText!,
+                              assigneeLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: textTheme.bodySmall?.copyWith(
-                                color: scheduleColor,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ),
-                        ],
-                        if (hasRecurrence) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Semantics(
-                            label:
-                                'Repeats ${recurrenceType.label.toLowerCase()}',
-                            excludeSemantics: true,
-                            container: true,
-                            child: Icon(
-                              Icons.repeat,
-                              size: 13,
-                              color: colorScheme.onSurfaceVariant,
+                          if (scheduleText != null) ...[
+                            Text(
+                              '  ·  ',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
+                            Flexible(
+                              child: Text(
+                                scheduleText!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: textTheme.bodySmall?.copyWith(
+                                  color: scheduleColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (hasRecurrence) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            Semantics(
+                              label:
+                                  'Repeats ${recurrenceType.label.toLowerCase()}',
+                              excludeSemantics: true,
+                              container: true,
+                              child: Icon(
+                                Icons.repeat,
+                                size: 13,
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Task actions',
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                onSelected: (value) {
+                  if (value == 'edit') onEdit();
+                  if (value == 'delete') onDelete();
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  PopupMenuItem(value: 'delete', child: Text('Delete task')),
                 ],
               ),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Task actions',
-              icon: Icon(
-                Icons.more_vert_rounded,
-                color: colorScheme.onSurfaceVariant,
-              ),
-              onSelected: (value) {
-                if (value == 'edit') onEdit();
-                if (value == 'delete') onDelete();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit', child: Text('Edit')),
-                PopupMenuItem(value: 'delete', child: Text('Delete task')),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Outlines the row a Today tap led to. The outline (not just a colour change)
+/// and the `selected` semantics keep the marker usable without colour vision
+/// or with a screen reader.
+class _HighlightFrame extends StatelessWidget {
+  const _HighlightFrame({required this.highlighted, required this.child});
+
+  final bool highlighted;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      selected: highlighted,
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          border: highlighted
+              ? Border.all(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                )
+              : null,
+        ),
+        child: child,
       ),
     );
   }

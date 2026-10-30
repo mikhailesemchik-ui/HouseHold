@@ -239,7 +239,15 @@ class _TodayEntryTile extends StatelessWidget {
         AppSpacing.sm,
       ),
       child: AppSoftCard(
-        onTap: () => context.go('/homes/${entry.householdId}/tasks'),
+        onTap: () => context.go(
+          Uri(
+            path: '/homes/${entry.householdId}/tasks',
+            queryParameters: {
+              'task': entry.taskId,
+              if (entry.occurrenceId != null) 'occurrence': entry.occurrenceId,
+            },
+          ).toString(),
+        ),
         child: Row(
           children: [
             // Always unchecked and one-way (tap → complete): this is a "mark
