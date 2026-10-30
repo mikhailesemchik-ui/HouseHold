@@ -8,6 +8,7 @@ import 'package:household_os/features/homes/domain/household.dart';
 import 'package:household_os/features/homes/domain/household_event.dart';
 import 'package:household_os/features/homes/domain/household_stats.dart';
 import 'package:household_os/features/homes/domain/household_summary.dart';
+import 'package:household_os/features/homes/domain/task_rotation_suggestion.dart';
 import 'package:household_os/features/homes/presentation/homes_provider.dart';
 import 'package:household_os/features/homes/presentation/household_detail_screen.dart';
 import 'package:household_os/features/homes/presentation/membership_watcher.dart';
@@ -357,6 +358,103 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('6'), findsOneWidget);
+  });
+
+  // QA17: a 401 right after the host woke up left "Could not load rotation
+  // suggestions" on screen while the numbers above it were fine. Automatic
+  // provider retries are off (noProviderRetry), so the card recovers through
+  // Retry or the F16 invalidation, and never loops on a persistent failure.
+  group('rotation suggestions error recovery', () {
+    const failedText = 'Could not load rotation suggestions.';
+    late ProviderContainer container;
+    late int calls;
+
+    Future<void> pumpScreen(
+      WidgetTester tester,
+      List<TaskRotationSuggestion> Function(int call) load,
+    ) async {
+      calls = 0;
+      container = ProviderContainer(
+        overrides: [
+          householdStatsProvider(_req('hh')).overrideWith(
+            (ref) async => _stats(HouseholdStatsPeriod.last30Days, 5),
+          ),
+          taskRotationSuggestionsProvider('hh').overrideWith((ref) async {
+            calls++;
+            return load(calls);
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: StatisticsScreen(householdId: 'hh')),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    const suggestion = TaskRotationSuggestion(
+      taskId: 'task-1',
+      taskTitle: 'Clean kitchen',
+      dominantMemberId: 'u1',
+      dominantMemberName: 'Anna',
+      suggestedMemberId: 'u2',
+      suggestedMemberName: 'Mihails',
+      dominantCompletionCount: 7,
+      totalCompletionCount: 8,
+      dominantShare: 87.5,
+    );
+
+    testWidgets('Retry after a transient failure replaces the error with data, '
+        'and the statistics stay correct meanwhile', (tester) async {
+      await pumpScreen(
+        tester,
+        (call) => call == 1 ? throw StateError('401') : [suggestion],
+      );
+      expect(find.text(failedText), findsOneWidget);
+      expect(find.text('5'), findsOneWidget, reason: 'numbers unaffected');
+
+      await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(failedText), findsNothing);
+      expect(find.text('Rotation suggestions'), findsOneWidget);
+      expect(calls, 2);
+    });
+
+    testWidgets('a refresh from the F16 invalidation clears the error, and an '
+        'empty result is a legitimate empty state', (tester) async {
+      await pumpScreen(
+        tester,
+        (call) => call == 1 ? throw StateError('401') : const [],
+      );
+      expect(find.text(failedText), findsOneWidget);
+
+      container.invalidate(taskRotationSuggestionsProvider('hh'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(failedText), findsNothing);
+      expect(find.text('Rotation suggestions'), findsNothing);
+      expect(calls, 2);
+    });
+
+    testWidgets('a persistent failure stays visible and fetches once per '
+        'Retry, never in a loop', (tester) async {
+      await pumpScreen(tester, (_) => throw StateError('403'));
+      expect(calls, 1);
+
+      await tester.pump(const Duration(seconds: 30));
+      expect(calls, 1, reason: 'no automatic retry');
+
+      await tester.tap(find.widgetWithText(TextButton, 'Retry'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 30));
+
+      expect(find.text(failedText), findsOneWidget);
+      expect(calls, 2);
+    });
   });
 }
 
