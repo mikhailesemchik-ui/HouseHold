@@ -549,4 +549,222 @@ void main() {
       });
     });
   });
+
+  // The server drops recurring slots earlier than the save instant, and the
+  // form's default time is the current minute, so a just-passed start used to
+  // lose the first occurrence. Every clock here is injected; nothing reads the
+  // real time.
+  group('TaskFormScreen — first occurrence of a new recurring task', () {
+    late DateTime clock;
+    late List<({DateTime? dueAt, RecurrenceType recurrence})> created;
+    Completer<void>? holdCreate;
+
+    // Pushed on a real navigator, so a successful save can pop the form.
+    Widget buildCreate({Task? existingTask}) {
+      return ProviderScope(
+        overrides: [
+          taskMembersProvider('hh').overrideWith((ref) async => members),
+        ],
+        child: MaterialApp(
+          theme: appTheme,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: FilledButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => TaskFormScreen(
+                      householdId: 'hh',
+                      existingTask: existingTask,
+                      nowOverride: () => clock,
+                      createTaskOverride: (dueAt, recurrence) async {
+                        created.add((dueAt: dueAt, recurrence: recurrence));
+                        await holdCreate?.future;
+                      },
+                    ),
+                  ),
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    setUp(() {
+      created = [];
+      holdCreate = null;
+      clock = DateTime(2026, 10, 29, 17, 46, 10);
+    });
+
+    Future<void> openAndPickDefaultTime(
+      WidgetTester tester, {
+      required String repeat,
+    }) async {
+      await tester.pumpWidget(buildCreate());
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Water plants');
+      await tester.tap(find.text('Set due date'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK')); // date: today, from the injected clock
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK')); // time: the current minute, 17:46
+      await tester.pumpAndSettle();
+      expect(find.text('Oct 29 · 17:46'), findsOneWidget);
+      await tester.tap(find.text(repeat));
+      await tester.pumpAndSettle();
+    }
+
+    const adjustedNote =
+        'Start moved to Oct 29 · 17:49 so the first occurrence is not '
+        'skipped. Tap Create again to confirm.';
+    const skippedNote =
+        'That time has already passed, so this occurrence will be skipped and '
+        'the first one will follow the repeat schedule.';
+
+    testWidgets('a just-passed start is moved, shown, and only saved after a '
+        'second tap', (tester) async {
+      await openAndPickDefaultTime(tester, repeat: 'Weekly');
+      clock = DateTime(2026, 10, 29, 17, 47, 30); // form-filling took 80 s
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(created, isEmpty, reason: 'nothing is sent behind the back');
+      expect(find.text(adjustedNote), findsOneWidget);
+      expect(find.text('Oct 29 · 17:49'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(created, hasLength(1));
+      expect(created.single.recurrence, RecurrenceType.weekly);
+      expect(created.single.dueAt!.isUtc, isTrue);
+      expect(created.single.dueAt, DateTime(2026, 10, 29, 17, 49).toUtc());
+    });
+
+    testWidgets('daily is treated the same way', (tester) async {
+      await openAndPickDefaultTime(tester, repeat: 'Daily');
+      clock = DateTime(2026, 10, 29, 17, 47, 30);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(created.single.recurrence, RecurrenceType.daily);
+      expect(created.single.dueAt, DateTime(2026, 10, 29, 17, 49).toUtc());
+    });
+
+    testWidgets('a confirmed save is sent once, even while it is in flight', (
+      tester,
+    ) async {
+      holdCreate = Completer<void>();
+      await openAndPickDefaultTime(tester, repeat: 'Weekly');
+      clock = DateTime(2026, 10, 29, 17, 47, 30);
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextButton, 'Create'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(created, hasLength(1));
+      holdCreate!.complete();
+      await tester.pumpAndSettle();
+      expect(created, hasLength(1));
+    });
+
+    testWidgets('an older same-day start is kept, flagged before saving, and '
+        'not moved', (tester) async {
+      await openAndPickDefaultTime(tester, repeat: 'Weekly');
+      clock = DateTime(2026, 10, 29, 20, 5);
+      await tester.tap(find.text('Daily')); // any change rebuilds the form
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Weekly'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(skippedNote), findsOneWidget);
+      expect(find.text('Oct 29 · 17:46'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(created, hasLength(1));
+      expect(created.single.dueAt, DateTime(2026, 10, 29, 17, 46).toUtc());
+    });
+
+    testWidgets('Create shows the skip warning first when time passed without '
+        'the form rebuilding', (tester) async {
+      await openAndPickDefaultTime(tester, repeat: 'Weekly');
+      clock = DateTime(2026, 10, 29, 20, 5); // idle for hours, no rebuild
+      expect(find.text(skippedNote), findsNothing);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(created, isEmpty, reason: 'warned before saving');
+      expect(find.text(skippedNote), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(created, hasLength(1));
+      expect(created.single.dueAt, DateTime(2026, 10, 29, 17, 46).toUtc());
+    });
+
+    testWidgets('a start that is still ahead gets no note and no change', (
+      tester,
+    ) async {
+      await openAndPickDefaultTime(tester, repeat: 'Weekly');
+      clock = DateTime(2026, 10, 29, 17, 40); // six minutes before the start
+      await tester.tap(find.text('Daily'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(adjustedNote), findsNothing);
+      expect(find.text(skippedNote), findsNothing);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(created.single.dueAt, DateTime(2026, 10, 29, 17, 46).toUtc());
+      expect(created.single.recurrence, RecurrenceType.daily);
+    });
+
+    testWidgets('a one-off task keeps its past time untouched', (tester) async {
+      await openAndPickDefaultTime(tester, repeat: 'None');
+      clock = DateTime(2026, 10, 29, 17, 47, 30);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Create'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(adjustedNote), findsNothing);
+      expect(created.single.recurrence, RecurrenceType.none);
+      expect(created.single.dueAt, DateTime(2026, 10, 29, 17, 46).toUtc());
+    });
+
+    testWidgets('editing an existing recurring task shows no first-occurrence '
+        'note', (tester) async {
+      final existing = Task(
+        id: 't1',
+        householdId: 'hh',
+        title: 'Water plants',
+        createdBy: 'u1',
+        createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 1, 1),
+        dueAt: DateTime(2026, 10, 29, 17, 46).toUtc(),
+        recurrenceType: RecurrenceType.weekly,
+      );
+      clock = DateTime(2026, 10, 29, 22, 5);
+      await tester.pumpWidget(buildCreate(existingTask: existing));
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Oct 29 · 17:46'), findsOneWidget);
+      expect(find.text(skippedNote), findsNothing);
+      expect(find.text(adjustedNote), findsNothing);
+    });
+  });
 }

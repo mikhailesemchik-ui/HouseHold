@@ -8,6 +8,7 @@ import 'package:household_os/core/widgets/app_screen_header.dart';
 import 'package:household_os/core/widgets/app_section_header.dart';
 import 'package:household_os/core/widgets/confirm_destructive.dart';
 import 'package:household_os/features/tasks/data/task_repository.dart';
+import 'package:household_os/features/tasks/domain/first_occurrence.dart';
 import 'package:household_os/features/tasks/domain/recurrence_type.dart';
 import 'package:household_os/features/tasks/domain/task.dart';
 import 'package:household_os/features/tasks/domain/task_member.dart';
@@ -41,10 +42,18 @@ class TaskFormScreen extends ConsumerStatefulWidget {
     super.key,
     required this.householdId,
     this.existingTask,
+    this.nowOverride,
+    this.createTaskOverride,
   });
 
   final String householdId;
   final Task? existingTask;
+
+  /// Test seams: the clock the first-occurrence rule reads, and a stand-in for
+  /// the repository's `createTask` that receives the effective schedule.
+  final DateTime Function()? nowOverride;
+  final Future<void> Function(DateTime? dueAt, RecurrenceType recurrence)?
+  createTaskOverride;
 
   @override
   ConsumerState<TaskFormScreen> createState() => _TaskFormScreenState();
@@ -58,10 +67,32 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
   RecurrenceType _recurrenceType = RecurrenceType.none;
   String? _titleError;
   String? _dueRecurrenceError;
+  String? _adjustedNote;
+  bool _skipNoteShown = false;
   bool _isSubmitting = false;
   bool _isDirty = false;
 
   bool get _isEdit => widget.existingTask != null;
+
+  DateTime _now() => (widget.nowOverride ?? DateTime.now)();
+
+  /// Explains what will happen to the first occurrence. Only new recurring
+  /// tasks have one: a start that was just moved, or one the server will skip.
+  String? get _scheduleNote {
+    if (_isEdit) return null;
+    if (_adjustedNote != null) return _adjustedNote;
+    final due = _dueAt;
+    if (due == null) return null;
+    final decision = resolveFirstOccurrence(
+      selected: due,
+      now: _now(),
+      recurrence: _recurrenceType,
+    );
+    if (decision.outcome != FirstOccurrenceOutcome.passedSkipped) return null;
+    _skipNoteShown = true;
+    return 'That time has already passed, so this occurrence will be skipped '
+        'and the first one will follow the repeat schedule.';
+  }
 
   @override
   void initState() {
@@ -104,12 +135,14 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
   void _onRecurrenceChanged(RecurrenceType value) {
     setState(() {
       _recurrenceType = value;
+      _adjustedNote = null;
+      _skipNoteShown = false;
       _isDirty = true;
     });
   }
 
   Future<void> _pickDueDateTime() async {
-    final now = DateTime.now();
+    final now = _now();
     final initialDate = _dueAt?.toLocal() ?? now;
     final date = await showDatePicker(
       context: context,
@@ -120,7 +153,7 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
     if (date == null || !mounted) return;
     final initialTime = _dueAt != null
         ? TimeOfDay.fromDateTime(_dueAt!.toLocal())
-        : TimeOfDay.now();
+        : TimeOfDay.fromDateTime(now);
     final time = await showTimePicker(
       context: context,
       initialTime: initialTime,
@@ -134,6 +167,8 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
         time.hour,
         time.minute,
       ).toUtc();
+      _adjustedNote = null;
+      _skipNoteShown = false;
       _dueRecurrenceError = null;
       _isDirty = true;
     });
@@ -143,6 +178,8 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
     setState(() {
       _dueAt = null;
       _recurrenceType = RecurrenceType.none;
+      _adjustedNote = null;
+      _skipNoteShown = false;
       _dueRecurrenceError = null;
       _isDirty = true;
     });
@@ -164,6 +201,33 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
     }
 
     if (_isSubmitting) return;
+
+    final due = _dueAt;
+    if (!_isEdit && due != null) {
+      // A time that has only just passed would lose the first occurrence on
+      // the server. Show the moved start and let the user confirm it.
+      final decision = resolveFirstOccurrence(
+        selected: due,
+        now: _now(),
+        recurrence: _recurrenceType,
+      );
+      if (decision.outcome == FirstOccurrenceOutcome.adjusted) {
+        setState(() {
+          _dueAt = decision.dueAt;
+          _adjustedNote =
+              'Start moved to ${_formatDueAt(decision.dueAt)} so the first '
+              'occurrence is not skipped. Tap Create again to confirm.';
+        });
+        return;
+      }
+      // The warning is computed while building, so time that passed since the
+      // last rebuild may not have been shown yet: show it before saving.
+      if (decision.outcome == FirstOccurrenceOutcome.passedSkipped &&
+          !_skipNoteShown) {
+        setState(() {});
+        return;
+      }
+    }
 
     String? assignee = _selectedAssigneeId;
     if (_isEdit) {
@@ -205,9 +269,8 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final repo = TaskRepository(supabaseClient);
       if (_isEdit) {
-        await repo.updateTask(
+        await TaskRepository(supabaseClient).updateTask(
           taskId: widget.existingTask!.id,
           title: title,
           description: _descriptionController.text,
@@ -215,8 +278,10 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
           dueAt: _dueAt,
           recurrenceType: _recurrenceType,
         );
+      } else if (widget.createTaskOverride != null) {
+        await widget.createTaskOverride!(_dueAt, _recurrenceType);
       } else {
-        await repo.createTask(
+        await TaskRepository(supabaseClient).createTask(
           householdId: widget.householdId,
           title: title,
           description: _descriptionController.text,
@@ -385,6 +450,7 @@ class _TaskFormScreenState extends ConsumerState<TaskFormScreen> {
                     const AppSectionHeader(label: 'Schedule'),
                     _DueDateRow(
                       dueAt: _dueAt,
+                      note: _scheduleNote,
                       formatDueAt: _formatDueAt,
                       onPick: _pickDueDateTime,
                       onClear: _clearDueDate,
@@ -524,12 +590,14 @@ class _AssigneeField extends StatelessWidget {
 class _DueDateRow extends StatelessWidget {
   const _DueDateRow({
     required this.dueAt,
+    required this.note,
     required this.formatDueAt,
     required this.onPick,
     required this.onClear,
   });
 
   final DateTime? dueAt;
+  final String? note;
   final String Function(DateTime) formatDueAt;
   final VoidCallback onPick;
   final VoidCallback onClear;
@@ -538,7 +606,7 @@ class _DueDateRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final hasDueDate = dueAt != null;
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         children: [
@@ -571,6 +639,21 @@ class _DueDateRow extends StatelessWidget {
             ),
         ],
       ),
+    );
+    if (note == null) return row;
+    return Column(
+      children: [
+        row,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            note!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
