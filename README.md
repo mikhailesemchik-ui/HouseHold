@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mikhailesemchik-ui/HouseHold/releases/download/v1.0.0-preview.1/HouseholdOS-v1.0.0-preview.1-android.apk"><b>Download the Android preview (APK)</b></a>
+  <a href="https://github.com/mikhailesemchik-ui/HouseHold/releases/download/v1.0.1/HouseholdOS-v1.0.1-android.apk"><b>Download v1.0.1 for Android (APK)</b></a>
   &nbsp;·&nbsp;
   <a href="#screenshots">Screenshots</a>
   &nbsp;·&nbsp;
@@ -75,19 +75,16 @@ households contain demo data.</sub>
 ## Install
 
 1. On an Android 7.0+ phone, open the
-   [`v1.0.0-preview.1` release](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0-preview.1)
-   and download `HouseholdOS-v1.0.0-preview.1-android.apk`. The release notes list its SHA-256 checksum.
+   [`v1.0.1` release](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.1)
+   and download `HouseholdOS-v1.0.1-android.apk`. The release notes list its SHA-256 checksum.
 2. Open the file and allow installation from your browser or file manager when Android asks.
 3. Open Household OS and tap **Get started**.
 
 The APK connects to the project's hosted Supabase backend, so there is no Supabase or Firebase
-configuration to do.
+configuration to do. It is distributed through GitHub Releases, not Google Play.
 
-> [!NOTE]
-> This is a preview build distributed outside Google Play. GitHub marks the older
-> [`v1.0.0`](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0) release as
-> "Latest", but it predates push notifications, account deletion and session recovery. Use
-> `v1.0.0-preview.1`.
+Updating over `v1.0.0-preview.1` was tested on an Android 14 emulator and kept the session and local
+settings. Updating over the original `v1.0.0` was not tested.
 
 ## Architecture
 
@@ -147,10 +144,10 @@ graph TD
 | `supabase/tests` | SQL and shell scripts for RLS, finances, account deletion, invites and push tokens; written for a local Supabase stack | Not run in CI |
 | Android push delivery | Manual, physical phone, debug build | Verified for task assignment |
 | Account deletion | Manual, emulator, hosted backend | Verified, including Auth removal and reconciliation |
-| Release APK | Manual, Android 16 emulator | Launch, onboarding, creating a household, navigation |
+| Release APK (v1.0.1) | Manual, Android 14 and 16 emulators | Fresh install and upgrade from the preview; onboarding, tasks, shopping, expenses, statistics, navigation |
 
-Not covered: the release APK on a physical device, push delivery with the release build, iOS, and
-end-to-end UI automation.
+Not covered: the v1.0.1 APK on a physical device, push delivery and widget interaction with the release
+build, upgrading from `v1.0.0`, iOS, and end-to-end UI automation.
 
 ## For developers
 
@@ -194,7 +191,7 @@ docs/             development setup, design reference, manual test scenarios, sc
 
 ## Status
 
-Household OS is a personal project at preview stage: it works on a hosted backend and has been used
-on a physical Android phone and an emulator. It is not on Google Play, and iOS builds from the same
+Household OS is a personal project. Version 1.0.1 is published on GitHub Releases and works against a
+hosted backend. It has been used on a physical Android phone (debug build) and on emulators. It is not on Google Play, and iOS builds from the same
 code but has not been tested. The repository has no license file yet, so all rights are reserved by
 default.
