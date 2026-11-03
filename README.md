@@ -132,13 +132,17 @@ flutter test
 
 ## Android preview
 
-Household OS is an Android preview and is **not published on Google Play**. Signed preview builds
-are meant to be distributed through [GitHub Releases](https://github.com/mikhailesemchik-ui/HouseHold/releases);
-Android asks you to allow installation from your browser or file manager the first time.
+**[Download the Android preview (APK)](https://github.com/mikhailesemchik-ui/HouseHold/releases/download/v1.0.0-preview.1/HouseholdOS-v1.0.0-preview.1-android.apk)**
+· [release notes and checksum](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0-preview.1)
 
-The `v1.0.0` APK on that page is an earlier build and predates the push-notification, account-deletion
-and session-recovery work described above. An updated signed preview build will be attached to a new
-release once it has been tested on a device.
+Household OS is an Android preview and is **not published on Google Play**. Download the APK on an
+Android 7.0+ phone, open it and allow installation from your browser or file manager when Android
+asks. The app connects to a hosted Supabase backend, so no setup is needed.
+
+The build is signed with the project's release key and was smoke-tested on an Android 16 emulator
+(launch, onboarding, creating a household, navigation). It has not yet been tested on a physical
+device, and push delivery was verified with a debug build rather than this release build. The older
+`v1.0.0` release predates the push-notification, account-deletion and session-recovery work.
 
 ## Project status
 
