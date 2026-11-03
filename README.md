@@ -2,6 +2,7 @@
 
 **Tasks, shopping and shared expenses for the people you live with — synced live, no signup form.**
 
+[![CI](https://github.com/mikhailesemchik-ui/HouseHold/actions/workflows/ci.yml/badge.svg)](https://github.com/mikhailesemchik-ui/HouseHold/actions/workflows/ci.yml)
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Realtime-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![Firebase](https://img.shields.io/badge/Firebase-Cloud%20Messaging-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com/products/cloud-messaging)
