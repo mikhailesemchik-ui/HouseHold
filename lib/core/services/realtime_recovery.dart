@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:household_os/core/services/supabase_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Bumped by the app shell every time the app returns to the foreground, so
 /// streams that failed while the app was away can reopen straight away.
@@ -15,6 +17,23 @@ class RealtimeResumeSignal extends Notifier<int> {
 
   void resumed() => state++;
 }
+
+/// Asks Supabase Auth for a new access token, whatever the local clock says.
+/// A permanently rejected refresh token makes the SDK clear the session and
+/// sign the user out (the app then returns to startup); a network failure
+/// leaves the session untouched. Overridable so tests need no Supabase.
+final sessionRefreshProvider = Provider<Future<void> Function()>(
+  (ref) => () async {
+    await supabaseClient.auth.refreshSession();
+  },
+);
+
+/// Whether PostgREST refused the access token itself (expired, or not valid
+/// for this project). Only these are worth a refresh; a denial by row-level
+/// security (42501) or any other error says nothing about the session.
+bool isRejectedTokenError(Object error) =>
+    error is PostgrestException &&
+    (error.code == 'PGRST303' || error.code == 'PGRST301');
 
 /// Wraps a Supabase `.stream()` so a transient Realtime failure heals itself.
 ///
@@ -44,6 +63,7 @@ Stream<T> recoveringStream<T>(
   var hadError = false;
   var exhausted = false;
   var disposed = false;
+  var refreshing = false;
 
   void start() {
     retryTimer?.cancel();
@@ -71,10 +91,36 @@ Stream<T> recoveringStream<T>(
       retryTimer = Timer(retryDelay * (1 << (attempts - 1)), start);
     }
 
+    Future<void> refreshThenRetry(Object error, StackTrace stackTrace) async {
+      refreshing = true;
+      try {
+        await ref.read(sessionRefreshProvider)();
+      } catch (refreshError) {
+        // Permanently rejected: the SDK has signed the user out and the app
+        // returns to startup. Offline: the session is kept and the retry
+        // below simply tries again.
+        debugPrint('$label session refresh failed: $refreshError');
+      } finally {
+        refreshing = false;
+      }
+      if (!disposed) scheduleRetry(error, stackTrace);
+    }
+
     void onError(Object error, StackTrace stackTrace) {
       hadError = true;
       debugPrint('$label realtime error (attempt $attempts): $error');
-      scheduleRetry(error, stackTrace);
+      if (!isRejectedTokenError(error)) {
+        scheduleRetry(error, stackTrace);
+      } else if (!refreshing && retryTimer == null && !exhausted) {
+        // Reason: the SDK refreshes by its own clock, so a token the server
+        // already considers expired can stay in use. Refresh explicitly
+        // before reopening instead of retrying with the same dead token.
+        if (attempts >= maxRetries) {
+          scheduleRetry(error, stackTrace);
+        } else {
+          unawaited(refreshThenRetry(error, stackTrace));
+        }
+      }
     }
 
     void onDone() {
