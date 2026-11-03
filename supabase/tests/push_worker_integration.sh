@@ -26,6 +26,7 @@ export MSYS_NO_PATHCONV=1
 ENV_DUMP=$(cd "$SB_WORKDIR" && supabase status -o env 2>/dev/null)
 ANON=$(echo "$ENV_DUMP" | sed -n 's/^ANON_KEY="\(.*\)"$/\1/p')
 SERVICE=$(echo "$ENV_DUMP" | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')
+WORKER_SECRET="throwaway-$(openssl rand -hex 24)"
 API_URL="http://supabase_kong_${DB_CONTAINER#supabase_db_}:8000"
 case "$API_URL" in
   http://supabase_kong_*hhsqltest*:8000) ;;
@@ -106,6 +107,7 @@ FCM_API_BASE=http://host.docker.internal:$PORT
 GOOGLE_TOKEN_URL=http://host.docker.internal:$PORT/token
 APNS_BASE_URL=http://host.docker.internal:$PORT
 PUSH_TOKEN_MAX_AGE_DAYS=$1
+PUSH_WORKER_INVOKE_SECRET=$WORKER_SECRET
 ENV
 }
 
@@ -141,6 +143,13 @@ invoke() { # key [limit]
   cx -w '\n%{http_code}' -X POST "$API_URL/functions/v1/process-notification-outbox" \
     -H "Authorization: Bearer $1" -H "Content-Type: application/json" -d "{\"limit\":${2:-25}}"
 }
+# The only accepted invocation: the anon JWT (gateway) plus the worker secret.
+invoke_worker() { # [limit]
+  cx -w '\n%{http_code}' -X POST "$API_URL/functions/v1/process-notification-outbox" \
+    -H "Authorization: Bearer $ANON" -H "X-Worker-Secret: $WORKER_SECRET" \
+    -H "Content-Type: application/json" -d "{\"limit\":${1:-25}}"
+}
+
 status_of() { tail -1; }
 body_of() { sed '$d'; }
 
@@ -210,16 +219,16 @@ PROBE=$(cx -X POST "$API_URL/auth/v1/signup" -H "apikey: $ANON" -H "Content-Type
 USER_JWT=$(echo "$PROBE" | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 PROBE_USER_ID=$(echo "$PROBE" | python -c "import sys,json; print(json.load(sys.stdin)['user']['id'])")
 OUT=$(invoke "$USER_JWT"); [ "$(echo "$OUT" | status_of)" = 401 ] || fail "a signed-in user's JWT was accepted"
-OUT=$(cx -w '\n%{http_code}' -X GET "$API_URL/functions/v1/process-notification-outbox" -H "Authorization: Bearer $SERVICE")
+OUT=$(cx -w '\n%{http_code}' -X GET "$API_URL/functions/v1/process-notification-outbox" -H "Authorization: Bearer $ANON" -H "X-Worker-Secret: $WORKER_SECRET")
 [ "$(echo "$OUT" | status_of)" = 405 ] || fail "GET was not refused"
 [ "$(total_sends)" = 0 ] || fail "a refused call sent notifications"
-pass "no credentials, the anon key and a user JWT are refused with no delivery; only the service role is accepted"
+pass "no credentials, the anon key and a user JWT are refused with no delivery; only the anon JWT plus worker secret is accepted"
 
 R1=$(mkrow 1 1); R2=$(mkrow 2 2); R3=$(mkrow 3 3); R4=$(mkrow 4 4); R5=$(mkrow 5 5)
 R6=$(mkrow 6 6); R7=$(mkrow 7 7); R8=$(mkrow 8 8); R9=$(mkrow 9 9); R10=$(mkrow 10 10)
 
 echo "=== run 1: delivery, privacy, invalid tokens, retry classification"
-OUT=$(invoke "$SERVICE"); [ "$(echo "$OUT" | status_of)" = 200 ] || fail "the worker did not run: $OUT"
+OUT=$(invoke_worker); [ "$(echo "$OUT" | status_of)" = 200 ] || fail "the worker did not run: $OUT"
 echo "summary: $(echo "$OUT" | body_of)"
 [ "$(sends tokOKandroid0000000000000000000000000001)" = 1 ] || fail "user 1 did not receive exactly one notification"
 [ "$(sends tokOKios0000000000000000000000000000002)" = 1 ] || fail "user 2 (iOS) did not receive exactly one"
@@ -269,13 +278,13 @@ done
 pass "success is recorded; a transient failure stays retryable; a row that reached one device is not repeated for it"
 
 echo "=== retry policy"
-OUT=$(invoke "$SERVICE"); [ "$(echo "$OUT" | status_of)" = 200 ] || fail "second run failed"
+OUT=$(invoke_worker); [ "$(echo "$OUT" | status_of)" = 200 ] || fail "second run failed"
 [ "$(outbox "$R7" "processed_at is not null")" = t ] || fail "a flaky send was not completed on retry"
 [ "$(sends tokFLAKYandroid0000000000000000000000008)" = 2 ] || fail "expected the flaky token to be tried twice"
-for i in 3 4 5; do invoke "$SERVICE" >/dev/null; done
+for i in 3 4 5; do invoke_worker >/dev/null; done
 [ "$(outbox "$R8" "failed_at is not null and attempt_count = 5")" = t ] || fail "a permanently failing send was not closed after 5 attempts"
 BEFORE=$(sends tokDOWNandroid000000000000000000000000009)
-invoke "$SERVICE" >/dev/null; invoke "$SERVICE" >/dev/null
+invoke_worker >/dev/null; invoke_worker >/dev/null
 [ "$(sends tokDOWNandroid000000000000000000000000009)" = "$BEFORE" ] || fail "a closed row was sent again"
 [ "$BEFORE" = 5 ] || fail "expected 5 attempts, saw $BEFORE"
 pass "a transient failure succeeds on retry (sent twice: at-least-once); a provider outage stops after exactly 5 attempts and is never retried again"
@@ -283,7 +292,7 @@ pass "a transient failure succeeds on retry (sent twice: at-least-once); a provi
 echo "=== crash recovery"
 R11=$(mkrow 1 11)
 psql_ -c "update notification_outbox set claimed_at = now() - interval '10 minutes', attempt_count = 1 where id = '$R11'" >/dev/null
-invoke "$SERVICE" >/dev/null
+invoke_worker >/dev/null
 [ "$(outbox "$R11" "processed_at is not null and attempt_count = 2")" = t ] || fail "a row stranded by a crashed worker was not recovered"
 pass "a row left claimed by a crashed worker is delivered once its lease expires"
 
@@ -291,9 +300,9 @@ echo "=== concurrent workers"
 before=$(total_sends)
 mktoken 11 tokSLOWandroid00000000000000000000000013 android
 for n in 21 22 23 24 25 26; do mkrow 11 "$n" >/dev/null; done
-( invoke "$SERVICE" 25 > "$TMP/w1.out" ) &
+( invoke_worker 25 > "$TMP/w1.out" ) &
 W1=$!
-( invoke "$SERVICE" 25 > "$TMP/w2.out" ) &
+( invoke_worker 25 > "$TMP/w2.out" ) &
 W2=$!
 # Wait for these two only: a bare `wait` would also wait for the mock provider
 # and the function server, which run until the end of the script.
@@ -320,7 +329,7 @@ insert into notification_outbox (recipient_user_id, type, title, body, processed
 insert into notification_outbox (recipient_user_id, type, title, body, failed_at) values ('$(U 12)', 'zz', 'a', 'b', now() - interval '15 days');
 insert into notification_outbox (recipient_user_id, type, title, body, processed_at) values ('$(U 12)', 'zz', 'a', 'b', now() - interval '1 day');
 SQL
-invoke "$SERVICE" >/dev/null
+invoke_worker >/dev/null
 [ "$(psql_ -c "select count(*) from notification_outbox where recipient_user_id = '$(U 12)' and type = 'zz'")" = 1 ] || fail "retention did not remove exactly the expired rows"
 pass "processed rows older than 7 days and failed rows older than 14 days are deleted; recent ones are kept"
 
@@ -330,7 +339,7 @@ mktoken 13 tokOLDandroid00000000000000000000000014 android 40
 mktoken 14 tokFRESHandroid000000000000000000000015 android 1
 RO=$(mkrow 13 31); RF=$(mkrow 14 32)
 start_worker 30
-invoke "$SERVICE" >/dev/null
+invoke_worker >/dev/null
 [ "$(sends tokOLDandroid00000000000000000000000014)" = 0 ] || fail "a stale registration received a notification"
 [ "$(sends tokFRESHandroid000000000000000000000015)" = 1 ] || fail "a fresh registration did not receive its notification"
 [ "$(psql_ -c "select count(*) from device_push_tokens where token like 'tokOLDandroid%'")" = 0 ] || fail "the stale registration was not pruned"

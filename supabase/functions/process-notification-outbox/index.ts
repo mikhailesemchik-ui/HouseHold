@@ -1,8 +1,10 @@
 ﻿// Delivers queued push notifications. Trusted backend only.
 //
-// Caller: must present the project's service-role key as a Bearer token. A
-// public (anon) or user JWT passes the platform's JWT check but is refused
-// here. Whatever schedules this function therefore has to hold that key.
+// Caller: JWT verification stays ON, so the platform gateway needs a valid
+// project JWT (the public anon JWT is enough). That alone authorizes nothing:
+// the request must also carry the dedicated secret PUSH_WORKER_INVOKE_SECRET in
+// the X-Worker-Secret header. The service-role key is used only inside this
+// function for database access and is never an invocation credential.
 //
 // Delivery semantics are AT LEAST ONCE. Rows are claimed atomically (a row is
 // handed to one worker at a time, with a lease), retried a bounded number of
@@ -33,7 +35,10 @@ type SendResult = 'sent' | 'invalid' | 'retry' | 'permanent';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const invokeSecret = Deno.env.get('PUSH_WORKER_INVOKE_SECRET') ?? '';
 
+// A shorter configured secret is treated as not configured (fail closed).
+const MIN_INVOKE_SECRET_LENGTH = 32;
 const MAX_ATTEMPTS = 5;
 const LEASE = '5 minutes';
 const VISIBLE_TITLE = 'Household OS';
@@ -63,9 +68,10 @@ Deno.serve(async (request) => {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, 405);
   }
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !serviceRoleKey || invokeSecret.length < MIN_INVOKE_SECRET_LENGTH) {
     return json({ error: 'Supabase environment is not configured' }, 500);
   }
+  // Before any body read or database call: a refused request touches nothing.
   if (!isTrustedCaller(request)) {
     return json({ error: 'unauthorized' }, 401);
   }
@@ -117,9 +123,9 @@ function safeErrorText(error: unknown): string {
 // ---------------------------------------------------------------------------
 
 function isTrustedCaller(request: Request): boolean {
-  const header = request.headers.get('authorization') ?? '';
-  if (!header.toLowerCase().startsWith('bearer ')) return false;
-  return constantTimeEqual(header.slice(7).trim(), serviceRoleKey);
+  const presented = request.headers.get('x-worker-secret') ?? '';
+  if (presented === '') return false;
+  return constantTimeEqual(presented, invokeSecret);
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
