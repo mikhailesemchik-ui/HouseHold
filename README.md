@@ -1,172 +1,178 @@
 # Household OS
 
-Tasks, shopping, and expenses for your household, synced live across everyone in it.
+**Tasks, shopping and shared expenses for the people you live with — synced live, no signup form.**
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.47-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.13-0175C2?logo=dart&logoColor=white)](https://dart.dev)
 [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Realtime-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
-[![Android](https://img.shields.io/badge/Android-ARM64-3DDC84?logo=android&logoColor=white)](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0)
-[![Release](https://img.shields.io/badge/release-v1.0.0-informational)](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0)
-[![Tests](https://img.shields.io/badge/tests-535%20passing-brightgreen)](#reliability)
+[![Firebase](https://img.shields.io/badge/Firebase-Cloud%20Messaging-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com/products/cloud-messaging)
+[![Android](https://img.shields.io/badge/Android-preview-3DDC84?logo=android&logoColor=white)](#android-preview)
 
-### Download
+Household OS is a calm, minimal Android app for a shared home. One Today list shows what needs
+doing across every household you belong to, a shared shopping list stays current, and a running
+balance tracks who paid for what. Everything updates live for every member.
 
-**[Download Household OS for Android](https://github.com/mikhailesemchik-ui/HouseHold/releases/download/v1.0.0/Household-OS-v1.0.0-arm64.apk)**
-`Android ARM64 · v1.0.0`
+<table>
+  <tr>
+    <td align="center"><img src="docs/assets/screenshots/dashboard.png" width="200" alt="Household dashboard with task, shopping, expense and member counts and recent activity"><br><sub>Household dashboard</sub></td>
+    <td align="center"><img src="docs/assets/screenshots/tasks.png" width="200" alt="Task list with assignees, due dates and completed tasks"><br><sub>Tasks</sub></td>
+    <td align="center"><img src="docs/assets/screenshots/expenses.png" width="200" alt="Expense balance and history with a record-settlement action"><br><sub>Expenses and balance</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/assets/screenshots/shopping.png" width="200" alt="Shared shopping list with active and completed items"><br><sub>Shopping list</sub></td>
+    <td align="center"><img src="docs/assets/screenshots/statistics.png" width="200" alt="Household statistics with completion counts and member distribution"><br><sub>Statistics</sub></td>
+    <td align="center"><img src="docs/screenshots/widget/android-widget-showcase.png" width="200" alt="Android home-screen widget grouping tasks as overdue, today, anytime, upcoming and completed"><br><sub>Home-screen widget</sub></td>
+  </tr>
+</table>
 
-Android will ask you to allow installation from your browser or file manager — the app is distributed directly, not through Google Play.
-
-<p align="center">
-  <img src="docs/screenshots/portfolio/today.png" width="46%" />
-  <img src="docs/screenshots/portfolio/expenses.png" width="46%" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/portfolio/shopping.png" width="46%" />
-  <img src="docs/screenshots/portfolio/dashboard.png" width="46%" />
-</p>
-
-## Overview
-
-A household shares chores, groceries, and bills, but not a record of any of it. Household OS gives it one: what's due, what's needed, who owes whom, kept current as anyone in the household makes a change.
-
-Open the app, see what needs attention, do one thing, leave. There's no backlog or project board — just a Today list, a shopping list, and a running balance. One account can belong to several households (a flat, a family home) and switch between them from Homes.
+<sub>Real screenshots from a physical Android device, running a debug build against the hosted
+backend with demo data.</sub>
 
 ## Features
 
-- **Today** — overdue, due today, upcoming, and anytime tasks, across every household at once.
-- **Tasks** — one-off or recurring, with due dates, assignment, and completion history.
+- **Today** — overdue, due today, upcoming and anytime tasks, across all your households at once.
+- **Tasks** — one-off or recurring, with due dates, assignment, editing and completion history.
 - **Shopping** — a shared list split into active and completed items.
-- **Expenses** — who paid, the split, and the resulting balance, with settlements to clear a debt.
-- **Dashboard** — live counts and a recent-activity feed per household.
-- **Members** — invite by code, transfer ownership, remove a member.
-- **Statistics** — completion trends and task-rotation suggestions.
-- **Reminders & widget** — local notifications for due tasks, plus a home-screen widget.
-
-## Android widget
-
-My Tasks as a home-screen widget: whatever is assigned to you, across every household, without opening the app.
-
-<p align="center">
-  <img src="docs/screenshots/widget/android-widget-showcase.png" width="42%" alt="Household OS Android widget showing overdue, today, anytime, upcoming, and completed tasks" />
-  <img src="docs/screenshots/widget/android-widget-compact.png" width="42%" alt="Household OS Android widget at its default compact size" />
-</p>
-
-- Same Overdue / Today / Anytime / Upcoming / Completed grouping as the Today screen, aggregated across households.
-- Tap a task to complete or reopen it directly from the widget — no app launch.
-- The row and the header counter update immediately; the write to Supabase happens in the background.
-- Completed-today tasks stay visible, struck through, until the next day.
-- Resizes between a compact layout (title and status only) and a larger one that also shows the household name, depending on the space given to it on the home screen.
-- A counts-only mode hides task titles and shows just "N to do · N completed," for a widget on a shared or lock-adjacent screen.
-
-Rendered with native Android `RemoteViews`, not a WebView or a persistently running Flutter engine. Tapping a task updates the widget immediately through a small native dispatcher, which then hands the actual completion to the existing Dart `TaskRepository`/Supabase RPC path in the background and reconciles the two once that write confirms.
+- **Expenses** — who paid and how it is split, one net balance per pair of members, and
+  settlements to clear a debt. Cancelled expenses are kept in an archive.
+- **Households** — create or join by invite code, switch between several households, transfer
+  ownership, remove a member.
+- **Dashboard and statistics** — live counts, a recent-activity feed, completion trends and
+  task-rotation suggestions.
+- **Push notifications** — Firebase Cloud Messaging delivers a notification when someone assigns
+  you a task (opt-in). The visible text is deliberately generic; details stay in the database.
+- **Reminders and widget** — local reminders for due tasks and a native Android home-screen widget.
+- **Account and privacy** — start anonymously, optionally link an email to protect and recover the
+  account, and delete the account from the app (confirmation phrase plus an emailed code for
+  linked accounts).
 
 ## Architecture
 
 ```mermaid
 graph TD
-    UI["Flutter UI (features/)"] --> RP["Riverpod providers & controllers"]
-    RP --> REPO["Repositories / services"]
-    REPO --> PG
+    subgraph APP["Flutter app (Android)"]
+        UI["UI (features/)"] --> RP["Riverpod providers"]
+        RP --> REPO["Repositories / services"]
+        LOCAL["Local reminders + widget"]
+    end
 
-    subgraph SB[Supabase]
-        PG["PostgreSQL"]
-        RLS["Row-level security"]
-        RPC["SQL functions (RPCs)"]
-        TRG["Triggers"]
-        RT["Realtime"]
-        EVT["household_events"]
-        PG --- RLS
+    REPO -->|"PostgREST, RPC, Realtime"| PG
+
+    subgraph SB["Supabase"]
+        PG["PostgreSQL + RLS"]
+        RPC["SQL functions (RPC)"]
+        OUT["notification_outbox"]
+        CRON["pg_cron + pg_net"]
+        EF1["Edge Function: process-notification-outbox"]
+        EF2["Edge Function: delete-account"]
         PG --- RPC
-        PG --- TRG
-        TRG --> EVT
-        EVT --> RT
+        RPC --> OUT
+        CRON -->|"every minute"| EF1
+        EF1 -->|"claim / complete"| OUT
+        CRON -->|"every 5 min: reconcile deletions"| PG
     end
 
-    RT -->|subscription| RP
-
-    subgraph AND["Android integration"]
-        NOTIF["Local notifications"]
-        WIDGET["Home-screen widget"]
-        FCM["Firebase client config"]
-    end
-
-    REPO --> NOTIF
-    REPO --> WIDGET
-    UI --> FCM
+    EF1 --> FCM["Firebase Cloud Messaging"]
+    FCM --> APP
+    REPO -->|"authenticated call"| EF2
+    EF2 --> PG
 ```
 
-- **State** — Riverpod 3: `StreamProvider`s over Supabase Realtime for live data, `AsyncNotifier`/`FutureProvider` for mutations and one-shot fetches.
-- **Navigation** — `go_router`, a shell route for the bottom nav, full-screen modals for forms.
-- **Backend** — Supabase Postgres, row-level security scoped to a user's households, SQL functions (RPCs) for multi-step writes, triggers that log a `household_events` row per change, Realtime for delivery.
-- **Platform services** — `flutter_local_notifications` for reminders (reboot-safe rescheduling), `home_widget` backing a native `AppWidgetProvider`, Firebase Cloud Messaging client config for future push.
+- **App** — Flutter with Riverpod 3 (`StreamProvider`s over Supabase Realtime for live data) and
+  `go_router`. Code is organised feature-first (`lib/features/<feature>/{data,domain,presentation}`).
+- **Data and access** — PostgreSQL with row-level security scoped to a user's households; multi-step
+  writes go through SQL functions; triggers log household events and queue notifications.
+- **Push** — a trigger writes to `notification_outbox`; a scheduled `pg_cron` + `pg_net` job calls the
+  `process-notification-outbox` Edge Function, which claims rows atomically (at-least-once delivery,
+  bounded retries) and sends them through FCM HTTP v1. The function is invoked with a dedicated
+  secret header, not the service-role key.
+- **Account deletion** — the `delete-account` Edge Function verifies the caller, runs the database
+  cleanup, deletes the Auth user and finalises the account. An interrupted deletion is finished
+  automatically by a scheduled reconciliation job.
+- **Session recovery** — when the server rejects an access token, realtime streams refresh the
+  session once and reopen; unrecoverable sessions fall back to the signed-out flow.
 
-## Realtime collaboration
+## Engineering
 
-A mutation writes to Postgres, a trigger logs a `household_events` row, and Supabase Realtime pushes it to every member's client. Each screen invalidates only the Riverpod providers that event could affect — a dashboard count, a member list, an assignment picker — so the UI updates without a manual refresh. Verified across a physical device and an emulator running as two separate household members at once.
-
-## Task model
-
-```
-Task definition → occurrence → per-instance completion
-```
-
-A task and its schedule are separate from any single completion. A recurring task generates occurrences, and completing one finishes that occurrence, not the task itself — recurrence history and future instances stay intact. A task with no due date just completes directly. This is what lets "water the plants every Monday" and "call the landlord, whenever" share the same model.
-
-## Expenses
-
-An expense has a payer, an amount, and the members it's split between (equal split). Every expense and settlement in a household rolls up into one net balance per pair of members — "you owe" or "owed to you." Recording a settlement clears it; deleting one restores it. Both update live.
-
-## Identity & access
-
-Household OS skips the signup form. Open the app, create or join a household, and you're in — no email or password required up front. An optional display name and avatar can be added later from Profile.
-
-Under the hood, that initial identity is Supabase anonymous auth. Members appear in the UI as short public codes, not raw database IDs, and every table is scoped by row-level security to the households a user actually belongs to.
-
-This is backend-enforced access control, not end-to-end encryption — there's no account-recovery flow yet if a device is lost.
-
-## Android integration
-
-- Scheduled local reminders for due tasks, with reboot-safe rescheduling.
-- Notification permission handling for Android 13+.
-- State refresh on app resume, not just on first load.
-
-The codebase builds for iOS; none of this — notifications or the home-screen widget — has been validated there yet.
-
-## Reliability
-
-| Check | Result |
+| Area | Status |
 |---|---|
-| `flutter analyze` | clean |
-| `flutter test` | 535/535 passing |
-| Multi-device realtime sync | verified (physical device + emulator, two identities) |
-| Offline startup | shows retry, not a blank screen or crash |
-| App-resume refresh | verified |
-| Android widget interaction | verified on physical hardware |
+| Static analysis | `flutter analyze` reports no issues |
+| Automated tests | 1050 Flutter tests pass (unit and widget) |
+| Database | 51 versioned SQL migrations in [`supabase/migrations`](supabase/migrations) |
+| SQL tests | RLS, financial integrity, account deletion, invite and push-token scripts in [`supabase/tests`](supabase/tests) (run against a local Supabase stack) |
+| Edge Functions | Two functions in [`supabase/functions`](supabase/functions); the worker's authentication has automated tests |
+| Verified end to end | Android push delivery on a physical device; in-app account deletion including Auth removal and reconciliation |
 
-## Tech stack
+Not covered: iOS has not been device-tested, and there is no end-to-end UI test suite.
 
-| Layer | Technology |
-|---|---|
-| App | Flutter, Dart |
-| State | Riverpod 3 |
-| Routing | go_router |
-| Backend | Supabase (PostgreSQL, RLS, Realtime, SQL functions) |
-| Notifications | flutter_local_notifications, Firebase Cloud Messaging (Android) |
-| Home-screen widget | home_widget + native Android `AppWidgetProvider` |
-| Identity | Supabase anonymous auth |
+## Getting started
 
-## Run locally
-
-Requires Flutter stable and an Android SDK.
+Requirements: Flutter (stable, 3.47 or newer), an Android SDK, and a Supabase project that has the
+migrations from `supabase/migrations` applied.
 
 ```bash
 flutter pub get
 
 flutter run \
-  --dart-define=SUPABASE_URL=<project-url> \
-  --dart-define=SUPABASE_ANON_KEY=<publishable-key>
+  --dart-define=SUPABASE_URL=https://<project-ref>.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=<publishable-or-anon-key>
 ```
 
-## Platform
+- Use the project's **publishable / anon** key only. Never put the service-role key in the app.
+- To keep values out of your shell history, put them in a JSON file that is not committed (for
+  example `.env.hosted.json`, which `.gitignore` already covers) and pass
+  `--dart-define-from-file=.env.hosted.json`.
+- Push notifications need your own Firebase project (`android/app/google-services.json`) and the
+  Edge Function secrets named in the header comments of `supabase/functions/*/index.ts`.
 
-Android is the current release target: v1.0.0, ARM64, validated on physical hardware. iOS builds from the same codebase; device validation there hasn't happened yet.
+```bash
+flutter analyze
+flutter test
+```
+
+## Android preview
+
+Household OS is an Android preview and is **not published on Google Play**. Signed preview builds
+are meant to be distributed through [GitHub Releases](https://github.com/mikhailesemchik-ui/HouseHold/releases);
+Android asks you to allow installation from your browser or file manager the first time.
+
+The `v1.0.0` APK on that page is an earlier build and predates the push-notification, account-deletion
+and session-recovery work described above. An updated signed preview build will be attached to a new
+release once it has been tested on a device.
+
+## Project status
+
+The app is feature-complete for its current scope and has been tested on a physical Android phone and
+an emulator against a hosted Supabase project. Remaining work before any store release is device
+testing of the release build, store listing material and a privacy policy. iOS builds from the same
+code base but has not been validated.
+
+## Project structure
+
+```text
+lib/
+  app/            app shell, theme, routing
+  core/           shared services (notifications, realtime recovery, config)
+  features/       auth, expenses, homes, profile, shopping, startup, tasks, today
+android/          Android project and native home-screen widget
+supabase/
+  migrations/     SQL schema, RLS, RPCs, triggers, scheduled jobs
+  functions/      delete-account, process-notification-outbox
+  tests/          SQL and shell integration tests
+test/             Flutter tests, mirroring lib/
+tools/device/     restricted wrapper used for on-device verification
+docs/             design reference, manual test scenarios, screenshots
+```
+
+## Security
+
+- Row-level security restricts every table to the households a user belongs to.
+- Privileged operations (account deletion, notification processing) run in Edge Functions with
+  service-role access that never reaches the client.
+- Secrets live in environment configuration and Edge Function secrets, never in the repository;
+  signing files and `.env.*` are git-ignored.
+- This is backend-enforced access control, not end-to-end encryption.
+
+## Contributing
+
+This is a personal portfolio project and no license has been added yet, so all rights are reserved
+by default. Issues and suggestions are welcome; please open an issue before sending a pull request.
