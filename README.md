@@ -72,6 +72,23 @@ households contain demo data.</sub>
 | Widget | Native Android home-screen widget; tasks can be completed from it |
 | Account | Anonymous start, optional email link for recovery, in-app account deletion |
 
+## Install
+
+1. On an Android 7.0+ phone, open the
+   [`v1.0.0-preview.1` release](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0-preview.1)
+   and download `HouseholdOS-v1.0.0-preview.1-android.apk`. The release notes list its SHA-256 checksum.
+2. Open the file and allow installation from your browser or file manager when Android asks.
+3. Open Household OS and tap **Get started**.
+
+The APK connects to the project's hosted Supabase backend, so there is no Supabase or Firebase
+configuration to do.
+
+> [!NOTE]
+> This is a preview build distributed outside Google Play. GitHub marks the older
+> [`v1.0.0`](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0) release as
+> "Latest", but it predates push notifications, account deletion and session recovery. Use
+> `v1.0.0-preview.1`.
+
 ## Architecture
 
 ```mermaid
@@ -127,7 +144,7 @@ graph TD
 | `flutter analyze` | Static analysis, run in CI | No issues |
 | `flutter test` | 1050 unit and widget tests, run in CI | All pass |
 | Push worker authentication | 7 Node tests, run locally | All pass |
-| `supabase/tests` | SQL and shell scripts for RLS, finances, account deletion, invites and push tokens, run locally against a Supabase stack | Not part of CI |
+| `supabase/tests` | SQL and shell scripts for RLS, finances, account deletion, invites and push tokens; written for a local Supabase stack | Not run in CI |
 | Android push delivery | Manual, physical phone, debug build | Verified for task assignment |
 | Account deletion | Manual, emulator, hosted backend | Verified, including Auth removal and reconciliation |
 | Release APK | Manual, Android 16 emulator | Launch, onboarding, creating a household, navigation |
@@ -135,41 +152,12 @@ graph TD
 Not covered: the release APK on a physical device, push delivery with the release build, iOS, and
 end-to-end UI automation.
 
-## Getting started
+## For developers
 
-### Try the app
-
-1. Open the [latest preview release](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0-preview.1)
-   on an Android 7.0+ phone and download the APK. The release notes list its SHA-256 checksum.
-2. Open the file and allow installation from your browser or file manager when Android asks.
-3. Open Household OS and tap **Get started**. The app uses a hosted backend, so there is nothing to
-   configure.
-
-> [!NOTE]
-> This is a preview build distributed outside Google Play. The older
-> [`v1.0.0`](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.0) release is
-> GitHub's default "Latest" entry, but it predates push notifications, account deletion and session
-> recovery. Use `v1.0.0-preview.1`.
-
-### Run the Flutter app
-
-You need Flutter 3.47 or newer, an Android SDK, and a Supabase project that has this repository's
-migrations applied.
-
-```bash
-flutter pub get
-flutter run \
-  --dart-define=SUPABASE_URL=https://<project-ref>.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=<publishable-or-anon-key>
-```
-
-`flutter run` does not create a backend. Use the publishable or anon key only, and keep the
-service-role key out of the app.
-
-### Set up your own backend
-
-Applying the migrations, enabling `pg_cron`, deploying the Edge Functions, setting their secrets and
-connecting your own Firebase project are described in [docs/development.md](docs/development.md).
+Household OS is a Flutter app on a Supabase backend (PostgreSQL, Realtime, Edge Functions) with
+Firebase Cloud Messaging for push. Running it yourself needs your own Supabase project with the
+migrations applied, plus a Firebase project for push. The step-by-step setup, Edge Function secrets
+and push scheduler notes are in **[docs/development.md](docs/development.md)**.
 
 ## Project structure
 
@@ -190,9 +178,16 @@ docs/             development setup, design reference, manual test scenarios, sc
 
 ## Security
 
-- Row-level security limits each table to the households a user belongs to.
+- Row-level security is enabled on all 18 tables. Tasks, shopping items, expenses, settlements and
+  activity are visible only to active members of the household they belong to. Direct writes to
+  tasks and shopping items need the same membership; expenses and settlements are created through
+  SQL functions.
+- Other tables follow their own rules: profiles are readable by their owner and by household
+  co-members, push tokens are readable and writable only by their owner, and invites are visible to
+  household owners. The notification outbox, the financial operation log and the deletion-attempt
+  counter have no client policies, so only server code can reach them.
 - Account deletion and notification processing run in Edge Functions. The service-role key stays on
-  the server.
+  the server and is never used to invoke them from outside.
 - Secrets live in environment configuration and Edge Function secrets. Signing files and `.env.*`
   are git-ignored.
 - Access control is enforced by the backend. Data is not end-to-end encrypted.
