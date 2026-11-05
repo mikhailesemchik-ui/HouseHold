@@ -79,7 +79,7 @@ class AppScreenHeader extends StatelessWidget {
                       width: leading == null
                           ? AppSpacing.base
                           : AppBarMetrics.leadingWidth,
-                      child: leading,
+                      child: _insetLeading(),
                     ),
                     SizedBox(
                       width: leading == null ? 0 : AppBarMetrics.titleSpacing,
@@ -118,13 +118,24 @@ class AppScreenHeader extends StatelessWidget {
     );
   }
 
+  // The leading slot is centred in a 72dp slot, which parks the 56dp circle
+  // 8dp from the screen edge. Insetting the slot's left by the 16dp content
+  // margin puts the painted circle on the same edge as the content cards
+  // while keeping the slot width, and so the title position, unchanged.
+  Widget? _insetLeading() => leading == null
+      ? null
+      : Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.base),
+          child: leading,
+        );
+
   Widget _centeredRow(AppBarThemeData appBarTheme) {
     return CustomMultiChildLayout(
       delegate: _CenteredHeaderLayout(),
       children: [
         LayoutId(
           id: _HeaderSlot.leading,
-          child: leading ?? const SizedBox.shrink(),
+          child: _insetLeading() ?? const SizedBox.shrink(),
         ),
         if (actions.isNotEmpty)
           LayoutId(
