@@ -454,6 +454,19 @@ final appTheme = ThemeData(
       borderRadius: BorderRadius.circular(AppRadius.lg),
     ),
   ),
+  // Shared by every PopupMenuButton (task actions, home actions, ...): same
+  // white lifted surface and radius as dialogs, a soft green-tinted shadow
+  // instead of the default grey Material one.
+  popupMenuTheme: PopupMenuThemeData(
+    color: _kSurfaceWhite,
+    surfaceTintColor: Colors.transparent,
+    elevation: 4,
+    shadowColor: _kOnSurface.withValues(alpha: 0.25),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      side: const BorderSide(color: _kOutlineVariant),
+    ),
+  ),
   bottomSheetTheme: const BottomSheetThemeData(
     backgroundColor: _kSurfaceWhite,
     surfaceTintColor: Colors.transparent,
