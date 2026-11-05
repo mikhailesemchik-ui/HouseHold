@@ -259,6 +259,13 @@ void main() {
 
         expect(find.text('Could not load members.'), findsOneWidget);
         expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+        // The inline Retry must stay a 48dp touch target (shrinkWrap only drops the
+        // extra padding; the theme's minimumSize provides the size).
+        final retrySize = tester.getSize(
+          find.widgetWithText(TextButton, 'Retry'),
+        );
+        expect(retrySize.height, greaterThanOrEqualTo(48));
+        expect(retrySize.width, greaterThanOrEqualTo(48));
         expect(find.text('Unassigned'), findsNothing);
       },
     );
