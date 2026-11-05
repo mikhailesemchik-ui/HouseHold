@@ -167,10 +167,25 @@ void main() {
           ),
         ),
       );
-      return tester.getRect(find.text('Record\nsettlement'));
+      return tester.getRect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Text && w.data?.replaceAll('\n', ' ') == 'Record settlement',
+        ),
+      );
     }
 
-    for (final width in [337.0, 360.0, 414.0]) {
+    // At 414dp the title measured with real Nunito stays on one line within
+    // the shrink limit, so only the narrower widths break it in two.
+    testWidgets('is centred on one line at 414.0dp', (tester) async {
+      final box = await pumpRecord(tester, 414);
+      expect(box.center.dx, closeTo(207, 1));
+      expect(tester.takeException(), isNull);
+      expect(find.text('Record settlement'), findsOneWidget);
+      expect(box.height, lessThan(50));
+    });
+
+    for (final width in [337.0, 360.0]) {
       testWidgets('is centred on two lines at ${width}dp', (tester) async {
         final box = await pumpRecord(tester, width);
         expect(box.center.dx, closeTo(width / 2, 1));

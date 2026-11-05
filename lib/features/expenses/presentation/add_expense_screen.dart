@@ -219,7 +219,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                     onPressed: _defaultsInitialized ? _submit : null,
                     style: TextButton.styleFrom(
                       foregroundColor: colorScheme.primary,
-                      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                      textStyle: const TextStyle(
+                        fontFamily: appFontFamily,
+                        fontWeight: FontWeight.w600,
+                      ),
                       // Trims the button's invisible side padding so the
                       // centred title keeps enough room. Min size, and so the
                       // tap target, is unchanged.

@@ -309,12 +309,17 @@ const _kOverlayStyle = SystemUiOverlayStyle(
 /// AppBar builds. Re-exported so `main` does not need to know the colours.
 const appSystemUiOverlayStyle = _kOverlayStyle;
 
+/// Components that replace (rather than merge) their text style drop the
+/// ambient family and fall back to SF on iOS / Roboto on Android, so their
+/// themed or `styleFrom` styles must name it explicitly.
+const appFontFamily = 'Nunito';
+
 final appTheme = ThemeData(
   useMaterial3: true,
   // The one place the Nunito family is set — every text role below inherits
   // it through the ambient `DefaultTextStyle`, the same way weight/spacing
   // overrides already cascade, so no per-role `fontFamily:` repetition.
-  fontFamily: 'Nunito',
+  fontFamily: appFontFamily,
   colorScheme: _kColorScheme,
   extensions: const [AppTokens.light],
   // Transparent so the single shell-root `AppBackground` (see
@@ -336,6 +341,7 @@ final appTheme = ThemeData(
     // Bigger/bolder than the M3 default `titleLarge`, matching the
     // reference's large rounded screen titles.
     titleTextStyle: TextStyle(
+      fontFamily: appFontFamily,
       fontSize: 31,
       fontWeight: FontWeight.w800,
       letterSpacing: -0.5,
@@ -580,7 +586,11 @@ final appTheme = ThemeData(
       // 44dp tall: a practical, accessible tap target without the oversized
       // pill look the v1 board used.
       minimumSize: const Size(64, 48),
-      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+      textStyle: const TextStyle(
+        fontFamily: appFontFamily,
+        fontWeight: FontWeight.w600,
+        fontSize: 15,
+      ),
     ),
   ),
   chipTheme: ChipThemeData(
@@ -589,12 +599,15 @@ final appTheme = ThemeData(
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(AppRadius.sm),
     ),
-    labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+    labelStyle: const TextStyle(
+      fontFamily: appFontFamily,
+      fontWeight: FontWeight.w600,
+    ),
     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
   ),
   snackBarTheme: const SnackBarThemeData(
     backgroundColor: _kOnSurface,
-    contentTextStyle: TextStyle(color: _kOnPrimary),
+    contentTextStyle: TextStyle(fontFamily: appFontFamily, color: _kOnPrimary),
   ),
   progressIndicatorTheme: const ProgressIndicatorThemeData(
     color: _kPrimary,
