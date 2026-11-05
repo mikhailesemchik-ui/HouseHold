@@ -144,6 +144,59 @@ void main() {
       expect(find.textContaining('typo'), findsOneWidget);
     });
 
+    testWidgets('collapses on a second tap', (tester) async {
+      await tester.pumpWidget(
+        _host(ArchiveSection(entries: [ArchivedEntry.fromMap(_archiveMap())])),
+      );
+      final header = find.text('Cancelled entries (1)');
+      await tester.tap(header);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Cancelled by Alice'), findsOneWidget);
+
+      await tester.tap(header);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Cancelled by Alice'), findsNothing);
+    });
+
+    testWidgets('pressing the header paints no ink highlight or splash', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(ArchiveSection(entries: [ArchivedEntry.fromMap(_archiveMap())])),
+      );
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('Cancelled entries (1)')),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+
+      final material = tester.renderObject(
+        find
+            .ancestor(
+              of: find.byType(ExpansionTile),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      // Baseline is the two rects the card itself draws; the grey highlight
+      // is a third one (verified by removing the Theme override).
+      expect(material, paintsExactlyCountTimes(#drawRect, 2));
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the no-ink theme does not leak outside the tile', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(ArchiveSection(entries: [ArchivedEntry.fromMap(_archiveMap())])),
+      );
+      final inside = Theme.of(tester.element(find.byType(ExpansionTile)));
+      final outside = Theme.of(tester.element(find.byType(Scaffold)));
+      expect(inside.splashFactory, NoSplash.splashFactory);
+      expect(inside.highlightColor, Colors.transparent);
+      expect(outside.splashFactory, isNot(NoSplash.splashFactory));
+    });
+
     testWidgets('renders nothing when there are no cancelled entries', (
       tester,
     ) async {
