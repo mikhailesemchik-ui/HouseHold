@@ -23,13 +23,23 @@ class ArchiveSection extends StatelessWidget {
         0,
       ),
       child: AppSoftCard(
-        child: ExpansionTile(
-          title: Text('Cancelled entries (${entries.length})'),
-          shape: const Border(),
-          collapsedShape: const Border(),
-          children: [
-            for (final entry in entries) _row(entry, textTheme, muted),
-          ],
+        // Scoped to this tile: its header's ListTile ink would otherwise
+        // flash a grey rectangle over the soft card on tap. Focus and hover
+        // colours are left alone so keyboard focus stays visible.
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            splashFactory: NoSplash.splashFactory,
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+          ),
+          child: ExpansionTile(
+            title: Text('Cancelled entries (${entries.length})'),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            children: [
+              for (final entry in entries) _row(entry, textTheme, muted),
+            ],
+          ),
         ),
       ),
     );
