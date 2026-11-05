@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mikhailesemchik-ui/HouseHold/releases/download/v1.0.1/HouseholdOS-v1.0.1-android.apk"><b>Download v1.0.1 for Android (APK)</b></a>
+  <a href="https://github.com/mikhailesemchik-ui/HouseHold/releases/download/v1.0.2/HouseholdOS-v1.0.2-android.apk"><b>Download v1.0.2 for Android (APK)</b></a>
   &nbsp;·&nbsp;
   <a href="#screenshots">Screenshots</a>
   &nbsp;·&nbsp;
@@ -75,8 +75,8 @@ households contain demo data.</sub>
 ## Install
 
 1. On an Android 7.0+ phone, open the
-   [`v1.0.1` release](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.1)
-   and download `HouseholdOS-v1.0.1-android.apk`. The release notes list its SHA-256 checksum.
+   [`v1.0.2` release](https://github.com/mikhailesemchik-ui/HouseHold/releases/tag/v1.0.2)
+   and download `HouseholdOS-v1.0.2-android.apk`. The release notes list its SHA-256 checksum.
 2. Open the file and allow installation from your browser or file manager when Android asks.
 3. Open Household OS and tap **Get started**.
 
@@ -139,14 +139,14 @@ graph TD
 | Check | Kind | Result |
 |---|---|---|
 | `flutter analyze` | Static analysis, run in CI | No issues |
-| `flutter test` | 1050 unit and widget tests, run in CI | All pass |
+| `flutter test` | 1060 unit and widget tests, run in CI | All pass |
 | Push worker authentication | 7 Node tests, run locally | All pass |
 | `supabase/tests` | SQL and shell scripts for RLS, finances, account deletion, invites and push tokens; written for a local Supabase stack | Not run in CI |
 | Android push delivery | Manual, physical phone, debug build | Verified for task assignment |
 | Account deletion | Manual, emulator, hosted backend | Verified, including Auth removal and reconciliation |
-| Release APK (v1.0.1) | Manual, Android 14 and 16 emulators | Fresh install and upgrade from the preview; onboarding, tasks, shopping, expenses, statistics, navigation |
+| Release APK (v1.0.2) | Manual, Android 14 emulator (Genymotion) | Fresh install; in-place upgrade from v1.0.1 keeping the session and data; navigation, tasks, expenses, shopping (add), profile, popup menu |
 
-Not covered: the v1.0.1 APK on a physical device, push delivery and widget interaction with the release
+Not covered: the v1.0.2 APK on a physical device, push delivery and widget interaction with the release
 build, upgrading from `v1.0.0`, iOS, and end-to-end UI automation.
 
 ## For developers
@@ -191,7 +191,7 @@ docs/             development setup, design reference, manual test scenarios, sc
 
 ## Status
 
-Household OS is a personal project. Version 1.0.1 is published on GitHub Releases and works against a
+Household OS is a personal project. Version 1.0.2 is published on GitHub Releases and works against a
 hosted backend. It has been used on a physical Android phone (debug build) and on emulators. It is not on Google Play, and iOS builds from the same
 code but has not been tested. The repository has no license file yet, so all rights are reserved by
 default.
