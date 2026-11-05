@@ -94,7 +94,7 @@ void main() {
         // the last row clears the nav bar without the screen re-adding a
         // hand-maintained nav height on top of it — the double count this
         // replaced reserved roughly twice this space.
-        expect(bottomPaddingOfList(tester), navBarHeight);
+        expect(bottomPaddingOfList(tester), navBarHeight + 24);
       },
     );
 
@@ -105,7 +105,7 @@ void main() {
           (tester) async {
             const navBarHeight = 122.0;
             for (final (platform, gap) in [
-              (TargetPlatform.android, 0.0),
+              (TargetPlatform.android, 24.0),
               (TargetPlatform.iOS, 16.0),
             ]) {
               await tester.pumpWidget(

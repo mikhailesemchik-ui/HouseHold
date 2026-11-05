@@ -322,14 +322,14 @@ class _ProfileBodyState extends ConsumerState<_ProfileBody> {
       // screen edge and let scrolled content pass under the status-bar haze.
       // The shell publishes the nav bar's full height as the bottom padding,
       // which parks the last card flush against the top of the floating pill.
-      // iOS gets a small breathing gap on top of it; Android keeps the
-      // exact clearance it has always had.
+      // Each platform gets a breathing gap on top of it: 16 on iOS, 24 on
+      // Android, so the last card stops clear of the pill at max scroll.
       padding: EdgeInsets.only(
         bottom:
             MediaQuery.paddingOf(context).bottom +
             (Theme.of(context).platform == TargetPlatform.iOS
                 ? AppSpacing.base
-                : 0),
+                : AppSpacing.lg),
       ),
       children: [
         widget.header,
