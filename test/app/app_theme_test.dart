@@ -19,8 +19,29 @@ void main() {
     });
 
     test('tertiary text token exists and is distinct from secondary', () {
-      expect(tokens.textTertiary, const Color(0xFF8D8F83));
+      expect(tokens.textTertiary, const Color(0xFF666859));
       expect(tokens.textTertiary, isNot(colorScheme.onSurfaceVariant));
+    });
+
+    test('tertiary text meets 4.5:1 on the grounds its hints sit on', () {
+      for (final ground in const [
+        Color(0xFFECE8E0), // flat form ground
+        Color(0xFFF7F4EC), // shell background base
+        Color(0xFFFFFFFF), // dialogs
+      ]) {
+        expect(
+          _contrast(tokens.textTertiary, ground),
+          greaterThanOrEqualTo(4.5),
+        );
+      }
+    });
+
+    test('unselected nav label meets 4.5:1 on the glass over the ground', () {
+      final glass = Color.alphaBlend(
+        const Color(0xB8FBFAF6),
+        const Color(0xFFF7F4EC),
+      );
+      expect(_contrast(tokens.navUnselected, glass), greaterThanOrEqualTo(4.5));
     });
 
     test('primary stays the shipped richer green, not the seed', () {
@@ -363,4 +384,13 @@ void main() {
   test('fontFamily is Nunito', () {
     expect(appTheme.textTheme.bodyMedium!.fontFamily, 'Nunito');
   });
+}
+
+/// WCAG relative-luminance contrast ratio between two opaque colors.
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final hi = la > lb ? la : lb;
+  final lo = la > lb ? lb : la;
+  return (hi + 0.05) / (lo + 0.05);
 }

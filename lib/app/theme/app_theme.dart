@@ -23,8 +23,9 @@ const _kSecondaryText = Color(0xFF5C5F55);
 
 // Tertiary text — placeholders, eyebrow labels, disabled/tertiary metadata.
 // Deliberately its own token rather than ColorScheme.tertiary: that slot is
-// reserved for a genuine third accent hue, not a muted-text role.
-const _kTertiaryText = Color(0xFF8D8F83);
+// reserved for a genuine third accent hue, not a muted-text role. Contrast:
+// 4.66:1 on the form ground, 5.2:1 on the shell ground, 5.7:1 on white.
+const _kTertiaryText = Color(0xFF666859);
 
 // Navigation unselected: warm mid-gray with a subtle green cast.
 const _kNavUnselected = Color(0xFF5E6B64);
