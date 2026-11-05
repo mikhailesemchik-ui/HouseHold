@@ -104,8 +104,6 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
             bottom: false,
             child: ListView.separated(
               padding: EdgeInsets.only(
-                left: AppSpacing.base,
-                right: AppSpacing.base,
                 top: AppSpacing.sm,
                 bottom: context.shellBottomInset + AppSpacing.base,
               ),
@@ -119,16 +117,24 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
                 if (i == 0) return header;
                 final member = members[i - 1];
                 final isCurrentUser = member.userId == currentUserId;
-                return _MemberRow(
-                  member: member,
-                  isCurrentUser: isCurrentUser,
-                  canManage:
-                      canManageMembers && !isCurrentUser && !member.isOwner,
-                  isSubmitting: _submittingMemberActions.contains(
-                    member.userId,
+                // The list has no horizontal padding so the header sits on
+                // the screen edge; the rows carry the 16dp content margin.
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.base,
                   ),
-                  onTransferOwnership: () => _confirmTransferOwnership(member),
-                  onRemove: () => _confirmRemoveMember(member),
+                  child: _MemberRow(
+                    member: member,
+                    isCurrentUser: isCurrentUser,
+                    canManage:
+                        canManageMembers && !isCurrentUser && !member.isOwner,
+                    isSubmitting: _submittingMemberActions.contains(
+                      member.userId,
+                    ),
+                    onTransferOwnership: () =>
+                        _confirmTransferOwnership(member),
+                    onRemove: () => _confirmRemoveMember(member),
+                  ),
                 );
               },
             ),

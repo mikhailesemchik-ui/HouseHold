@@ -31,7 +31,7 @@ class HomesScreen extends ConsumerWidget {
       title: 'Homes',
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: AppSpacing.xs),
+          padding: const EdgeInsets.only(right: AppSpacing.sm),
           child: AppCircleIconButton(
             icon: Icons.group_add,
             tooltip: 'Join home',
@@ -223,8 +223,6 @@ class _HomesList extends StatelessWidget {
       bottom: false,
       child: ListView.separated(
         padding: EdgeInsets.only(
-          left: AppSpacing.base,
-          right: AppSpacing.base,
           top: AppSpacing.sm,
           // Explicit padding opts out of automatic MediaQuery consumption, so
           // the nav clearance is re-applied here, plus room for the FAB.
@@ -236,8 +234,16 @@ class _HomesList extends StatelessWidget {
         // Each row is now its own elevated card (`docs/new_design`) — a gap
         // between them, not a shared hairline.
         separatorBuilder: (context, i) => const SizedBox(height: AppSpacing.sm),
-        itemBuilder: (context, index) =>
-            index == 0 ? header : _HomeRow(household: homes[index - 1]),
+        // The list has no horizontal padding so the header sits on the screen
+        // edge; the rows carry the 16dp content margin instead.
+        itemBuilder: (context, index) => index == 0
+            ? header
+            : Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.base,
+                ),
+                child: _HomeRow(household: homes[index - 1]),
+              ),
       ),
     );
   }

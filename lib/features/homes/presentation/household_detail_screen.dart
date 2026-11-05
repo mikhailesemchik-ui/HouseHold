@@ -239,7 +239,7 @@ class _HouseholdDetailScreenState extends ConsumerState<HouseholdDetailScreen> {
       ),
       actions: [
         Padding(
-          padding: const EdgeInsets.only(right: AppSpacing.xs),
+          padding: const EdgeInsets.only(right: AppSpacing.sm),
           // Same Telegram-frosted chrome as `AppCircleIconButton`, hand-built
           // here because a `PopupMenuButton` — not a plain callback — needs
           // to own the icon slot.

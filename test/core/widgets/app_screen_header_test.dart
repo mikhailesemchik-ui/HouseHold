@@ -30,6 +30,32 @@ void main() {
     );
   });
 
+  testWidgets('a 56dp leading circle sits on the 16dp content edge', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AppScreenHeader(
+            leading: const Center(child: SizedBox(width: 56, height: 56)),
+            title: 'Home',
+            centerTitle: true,
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester
+          .getTopLeft(
+            find.byWidgetPredicate(
+              (w) => w is SizedBox && w.width == 56 && w.height == 56,
+            ),
+          )
+          .dx,
+      16,
+    );
+  });
+
   testWidgets('without centerTitle the title stays left-aligned', (
     tester,
   ) async {
